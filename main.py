@@ -130,31 +130,27 @@ async def analisar(texto):
         veredito = "✅ ENTRAR"
         confianca = "Alta"
         conclusao = "Confluência positiva em múltiplos critérios técnicos."
-
     elif 1 <= len(criterios) < 3:
         veredito = "⏳ AGUARDAR"
         confianca = "Média"
         conclusao = "Alguns sinais presentes, mas insuficiente para entrada segura."
 
-        
-        msg = f"""{veredito} (Sinal Técnico)
-                Análise conforme o Prompt Fixo:
-        {chr(10).join(resumo)}
-                📌 Conclusão:
-        {conclusao}
-                Veredito: {veredito}
-        Confiança: {confianca}
-        """
+    msg = f"""{veredito} (Sinal Técnico)
 
+Análise conforme o Prompt Fixo:
+{chr(10).join(resumo)}
 
+📌 Conclusão:
+{conclusao}
+
+Veredito: {veredito}
+Confiança: {confianca}
 """
-"""
-        explicacao = await gerar_resposta_ia(msg)
+    explicacao = await gerar_resposta_ia(msg)
+    msg += f"\n\n🧠 Avaliação IA:\n{explicacao}"
 
-🧠 Avaliação IA:
-{explicacao}"
     bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
-
+    
 # ESCUTA TELETHON
 client = TelegramClient('sessao_sinais', API_ID, API_HASH)
 
