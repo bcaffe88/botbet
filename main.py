@@ -138,16 +138,13 @@ async def analisar(texto):
 
         
         msg = f"""{veredito} (Sinal Técnico)
-
-Análise conforme o Prompt Fixo:
-{chr(10).join(resumo)}
-
-📌 Conclusão:
-{conclusao}
-
-Veredito: {veredito}
-Confiança: {confianca}
-"""
+                Análise conforme o Prompt Fixo:
+        {chr(10).join(resumo)}
+                📌 Conclusão:
+        {conclusao}
+                Veredito: {veredito}
+        Confiança: {confianca}
+        """
 
 
 """
