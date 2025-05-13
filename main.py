@@ -80,7 +80,7 @@ async def monitorar_odd(jogo, link, timeout=300):
 async def analisar_sinal(texto, link):
     try:
         jogo = texto.splitlines()[0].replace("⚽️", "").strip()
-        minuto = int(re.search(r"⏰\s*(\d+)[”'"`]", texto).group(1))
+        minuto = int(re.search(r"⏰\s*(\d+)[\"'`]", texto).group(1))
         ia = float(re.search(r"OVER 0\.5 HT:\s*([\d.]+)%", texto).group(1))
         vento = float(re.search(r"💨\s*([\d.]+)\s*m/s", texto).group(1))
         perigosos = list(map(int, re.findall(r"Ataques Perigosos:\s*(\d+)/(\d+)", texto)[0]))
