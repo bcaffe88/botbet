@@ -136,18 +136,19 @@ async def analisar(texto):
         confianca = "Média"
         conclusao = "Alguns sinais presentes, mas insuficiente para entrada segura."
 
+        
         msg = f"""{veredito} (Sinal Técnico)
 
 Análise conforme o Prompt Fixo:
-" + "
-".join(resumo)
+{chr(10).join(resumo)}
 
 📌 Conclusão:
-"""
 {conclusao}
 
 Veredito: {veredito}
-Confiança: {confianca}"
+Confiança: {confianca}
+"""
+
 
 """
 """
