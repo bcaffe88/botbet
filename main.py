@@ -172,7 +172,7 @@ def rodar_flask():
 
 if __name__ == "__main__":
     bot.delete_webhook()
-    bot.set_webhook(url=f"{WEBHOOK_URL}/webhook""")
+    bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
     threading.Thread(target=rodar_flask).start()
     client.start()
     client.run_until_disconnected()
