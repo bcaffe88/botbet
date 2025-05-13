@@ -150,7 +150,6 @@ Veredito: {veredito}
 Confiança: {confianca}"
 
 """
-"""
     explicacao = await gerar_resposta_ia(msg)
     msg += f"
 
