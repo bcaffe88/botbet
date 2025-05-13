@@ -143,6 +143,6 @@ async def tratar(event):
 if __name__ == "__main__":
     bot.delete_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
-    loop = asyncio.get_event_loop()
-    loop.create_task(client.start())
+    client.start()
     app.run(host="0.0.0.0", port=8080)
+
