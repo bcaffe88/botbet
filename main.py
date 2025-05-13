@@ -12,13 +12,13 @@ import asyncio, os, re, aiohttp, time, threading
 from hf_openassistant import gerar_resposta_ia
 
 # CONFIG
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
-CHAT_ID_SINAL = int(os.getenv("CHAT_ID_SINAL"))
-CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"))
-ODDS_API_KEY = os.getenv("ODDS_API_KEY")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+BOT_TOKEN = os.getenv("BOT_TOKEN""")
+API_ID = int(os.getenv("API_ID"""))
+API_HASH = os.getenv("API_HASH""")
+CHAT_ID_SINAL = int(os.getenv("CHAT_ID_SINAL"""))
+CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"""))
+ODDS_API_KEY = os.getenv("ODDS_API_KEY""")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL""")
 
 bot = Bot(token=BOT_TOKEN)
 app = Flask(__name__)
@@ -26,7 +26,7 @@ dispatcher = Dispatcher(bot=bot, update_queue=None, use_context=True)
 
 # COMANDOS
 def start(update: Update, context: CallbackContext):
-    update.message.reply_text("✅ Bot ativo com critérios refinados e IA.")
+    update.message.reply_text("✅ Bot ativo com critérios refinados e IA.""")
 
 def veredito_cmd(update: Update, context: CallbackContext):
     update.message.reply_text(
@@ -53,7 +53,7 @@ def webhook():
     dispatcher.process_update(update)
     return "ok"
 
-@app.route("/")
+@app.route("/""")
 def index():
     return "🏠 Webhook do bot ativo"
 
@@ -65,62 +65,62 @@ def avaliar_criterios(texto):
     try:
         ia = float(re.search(r"OVER 0\.5 HT:\s*([\d.]+)%", texto).group(1))
         if ia >= 85:
-            criterios.append("IA")
-        resumo.append(f"• IA: {ia:.2f}% {'✓' if ia >= 85 else '✘'}")
-    except: resumo.append("• IA: não encontrado ✘")
+            criterios.append("IA""")
+        resumo.append(f"• IA: {ia:.2f}% {'✓' if ia >= 85 else '✘'}""")
+    except: resumo.append("• IA: não encontrado ✘""")
 
     try:
         minuto = int(re.search(r"⏰\s*(\d+)["'`]", texto).group(1))
         if 18 <= minuto <= 27:
-            criterios.append("Minuto")
-        resumo.append(f"• Minuto: {minuto} {'✓' if 18 <= minuto <= 27 else '✘'}")
-    except: resumo.append("• Minuto: não encontrado ✘")
+            criterios.append("Minuto""")
+        resumo.append(f"• Minuto: {minuto} {'✓' if 18 <= minuto <= 27 else '✘'}""")
+    except: resumo.append("• Minuto: não encontrado ✘""")
 
     try:
         perigosos = list(map(int, re.findall(r"Ataques Perigosos:\s*(\d+)/(\d+)", texto)[0]))
         if max(perigosos) >= 3:
-            criterios.append("Ataques recentes")
-        resumo.append(f"• Ataques perigosos: {perigosos[0]} x {perigosos[1]} {'✓' if max(perigosos) >= 3 else '✘'}")
-    except: resumo.append("• Ataques perigosos: não encontrado ✘")
+            criterios.append("Ataques recentes""")
+        resumo.append(f"• Ataques perigosos: {perigosos[0]} x {perigosos[1]} {'✓' if max(perigosos) >= 3 else '✘'}""")
+    except: resumo.append("• Ataques perigosos: não encontrado ✘""")
 
     try:
         no_gol = list(map(int, re.findall(r"No Gol:\s*(\d+)/(\d+)", texto)[0]))
         total_no_gol = sum(no_gol)
         if total_no_gol >= 1:
-            criterios.append("Chutes no gol")
-        resumo.append(f"• Finalizações no gol: {no_gol[0]} x {no_gol[1]} {'✓' if total_no_gol >= 1 else '✘'}")
-    except: resumo.append("• Finalizações no gol: não encontrado ✘")
+            criterios.append("Chutes no gol""")
+        resumo.append(f"• Finalizações no gol: {no_gol[0]} x {no_gol[1]} {'✓' if total_no_gol >= 1 else '✘'}""")
+    except: resumo.append("• Finalizações no gol: não encontrado ✘""")
 
     try:
         escanteios = list(map(int, re.findall(r"Escanteios:\s*(\d+)/(\d+)", texto)[0]))
         if max(escanteios) >= 2:
-            criterios.append("Escanteios dominantes")
-        resumo.append(f"• Escanteios: {escanteios[0]} x {escanteios[1]} {'✓' if max(escanteios) >= 2 else '✘'}")
-    except: resumo.append("• Escanteios: não encontrado ✘")
+            criterios.append("Escanteios dominantes""")
+        resumo.append(f"• Escanteios: {escanteios[0]} x {escanteios[1]} {'✓' if max(escanteios) >= 2 else '✘'}""")
+    except: resumo.append("• Escanteios: não encontrado ✘""")
 
     try:
         vento = float(re.search(r"💨\s*([\d.]+)\s*m/s", texto).group(1))
         if vento < 20:
-            criterios.append("Vento ideal")
-        resumo.append(f"• Vento: {vento} m/s {'✓' if vento < 20 else '✘'}")
-    except: resumo.append("• Vento: não encontrado ✘")
+            criterios.append("Vento ideal""")
+        resumo.append(f"• Vento: {vento} m/s {'✓' if vento < 20 else '✘'}""")
+    except: resumo.append("• Vento: não encontrado ✘""")
 
     try:
         # Histórico manual ou simulado por padrão
         historico = 2  # fictício para exemplo
         if historico >= 2:
-            criterios.append("Histórico gols")
-        resumo.append(f"• Histórico recente da equipe dominante: {historico} {'✓' if historico >= 2 else '✘'}")
-    except: resumo.append("• Histórico recente: não disponível ✘")
+            criterios.append("Histórico gols""")
+        resumo.append(f"• Histórico recente da equipe dominante: {historico} {'✓' if historico >= 2 else '✘'}""")
+    except: resumo.append("• Histórico recente: não disponível ✘""")
 
     try:
         posse = list(map(int, re.findall(r"Posse de Bola:\s*(\d+)/(\d+)", texto)[0]))
         chutes = list(map(int, re.findall(r"Total:\s*(\d+)/(\d+)", texto)[0]))
         dominante = posse[1] > posse[0] and chutes[1] > chutes[0]
         if dominante:
-            criterios.append("Dominância visitante")
-        resumo.append(f"• Posse: {posse[0]}% x {posse[1]}% {'✓' if dominante else '✘'}")
-    except: resumo.append("• Posse e dominância: não disponível ✘")
+            criterios.append("Dominância visitante""")
+        resumo.append(f"• Posse: {posse[0]}% x {posse[1]}% {'✓' if dominante else '✘'}""")
+    except: resumo.append("• Posse e dominância: não disponível ✘""")
 
     return criterios, resumo
 
@@ -177,7 +177,7 @@ def rodar_flask():
 
 if __name__ == "__main__":
     bot.delete_webhook()
-    bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
+    bot.set_webhook(url=f"{WEBHOOK_URL}/webhook""")
     threading.Thread(target=rodar_flask).start()
     client.start()
     client.run_until_disconnected()
