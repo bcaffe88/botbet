@@ -3,8 +3,8 @@ from flask import Flask, request
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext
 from telethon.sync import TelegramClient, events
-import asyncio, os, re, aiohttp, time
-from hf_openassistant import gerar_resposta_ia  # IA explicativa
+import asyncio, os, re, aiohttp, time, threading
+from hf_openassistant import gerar_resposta_ia
 
 # CONFIG
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -24,13 +24,20 @@ def start(update: Update, context: CallbackContext):
 
 def veredito_cmd(update: Update, context: CallbackContext):
     texto = (
-        "📊 Critérios para ENTRAR:\n"
-        "- IA ≥ 85%\n"
-        "- Minuto ideal: 18’–22’ (aceitável: 15’–35’)\n"
-        "- Ataques perigosos ≥ 12 com desequilíbrio\n"
-        "- Chutes ≥ 3 (≥ 2 no gol)\n"
-        "- Escanteios ≥ 1\n"
-        "- Posse ≥ 60% ou compensação\n"
+        "📊 Critérios para ENTRAR:
+"
+        "- IA ≥ 85%
+"
+        "- Minuto ideal: 18’–22’ (aceitável: 15’–35’)
+"
+        "- Ataques perigosos ≥ 12 com desequilíbrio
+"
+        "- Chutes ≥ 3 (≥ 2 no gol)
+"
+        "- Escanteios ≥ 1
+"
+        "- Posse ≥ 60% ou compensação
+"
         "- Vento ideal: 3–8 m/s (ou compensado)"
     )
     update.message.reply_text(texto)
@@ -67,7 +74,11 @@ async def monitorar_odd(jogo, link, timeout=300):
                                             if linha["point"] == 0.5 and linha["name"] == "Over":
                                                 odd = linha["price"]
                                                 if odd >= 1.50:
-                                                    msg = f"⚽️ ENTRADA VALIDADA\n\n📌 Jogo: {nome}\n📈 Odd +0.5 HT atingiu {odd}\n💰 Valor sugerido: R$15"
+                                                    msg = f"⚽️ ENTRADA VALIDADA
+
+📌 Jogo: {nome}
+📈 Odd +0.5 HT atingiu {odd}
+💰 Valor sugerido: R$15"
                                                     bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("👉 Apostar agora", url=link)]]))
                                                     return
             await asyncio.sleep(30)
@@ -80,7 +91,7 @@ async def monitorar_odd(jogo, link, timeout=300):
 async def analisar_sinal(texto, link):
     try:
         jogo = texto.splitlines()[0].replace("⚽️", "").strip()
-        minuto = int(re.search(r"⏰\s*(\d+)[\"'`]", texto).group(1))
+        minuto = int(re.search(r"⏰\s*(\d+)["'`]", texto).group(1))
         ia = float(re.search(r"OVER 0\.5 HT:\s*([\d.]+)%", texto).group(1))
         vento = float(re.search(r"💨\s*([\d.]+)\s*m/s", texto).group(1))
         perigosos = list(map(int, re.findall(r"Ataques Perigosos:\s*(\d+)/(\d+)", texto)[0]))
@@ -114,12 +125,24 @@ async def analisar_sinal(texto, link):
             decisao = "❌ NÃO ENTRAR"
             confianca = "Baixa"
 
-        mensagem = f"{decisao} ({jogo})\n\nAnálise conforme o Prompt Fixo:\n" + "\n".join(linhas)
-        mensagem += f"\n\n📌 Conclusão:\n{'Situação ideal para entrada com confluência total.' if decisao=='✅ ENTRAR' else 'Cenário ainda incompleto ou fora da janela ideal.'}"
-        mensagem += f"\n\nVeredito: {decisao} (Confiança: {confianca})"
+        mensagem = f"{decisao} ({jogo})
+
+Análise conforme o Prompt Fixo:
+" + "
+".join(linhas)
+        mensagem += f"
+
+📌 Conclusão:
+{'Situação ideal para entrada com confluência total.' if decisao=='✅ ENTRAR' else 'Cenário ainda incompleto ou fora da janela ideal.'}"
+        mensagem += f"
+
+Veredito: {decisao} (Confiança: {confianca})"
 
         resposta_ia = await gerar_resposta_ia(mensagem)
-        mensagem += f"\n\n🧠 Avaliação IA:\n{resposta_ia}"
+        mensagem += f"
+
+🧠 Avaliação IA:
+{resposta_ia}"
 
         if decisao in ["✅ ENTRAR", "⏳ AGUARDAR"]:
             bot.send_message(chat_id=CHAT_ID_DESTINO, text=mensagem, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔗 Apostar agora", url=link)]]))
@@ -140,9 +163,15 @@ async def tratar(event):
         link = "https://bet365.com"
         await analisar_sinal(texto, link)
 
+def rodar_flask():
+    app.run(host="0.0.0.0", port=8080)
+
 if __name__ == "__main__":
     bot.delete_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
-    client.start()
-    app.run(host="0.0.0.0", port=8080)
 
+    flask_thread = threading.Thread(target=rodar_flask)
+    flask_thread.start()
+
+    client.start()
+    client.run_until_disconnected()
