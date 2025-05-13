@@ -28,23 +28,18 @@ dispatcher = Dispatcher(bot=bot, update_queue=None, use_context=True)
 def start(update: Update, context: CallbackContext):
     update.message.reply_text("✅ Bot ativo com critérios refinados e IA.""")
 
+
 def veredito_cmd(update: Update, context: CallbackContext):
-    update.message.reply_text(
-        "⚙️ Critérios Técnicos de Entrada:
-"
-        "- IA ≥ 85%
+    update.message.reply_text("""⚙️ Critérios Técnicos de Entrada:
+- IA ≥ 85%
 - Minuto 18–27
 - 3+ ataques perigosos recentes
-"
-        "- 1+ chute no gol
+- 1+ chute no gol
 - Escanteios ≥ 2
 - Vento < 20 m/s
-"
-        "- Histórico gols 1T ≥ 2 (últimos 5 jogos)
-- Visitante dominante"
-    )
+- Histórico gols 1T ≥ 2 (últimos 5 jogos)
+- Visitante dominante""")
 
-dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(CommandHandler("veredito", veredito_cmd))
 
 @app.route("/webhook", methods=["POST"])
