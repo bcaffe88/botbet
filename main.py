@@ -136,7 +136,7 @@ async def analisar(texto):
         confianca = "Média"
         conclusao = "Alguns sinais presentes, mas insuficiente para entrada segura."
 
-    msg = f"{veredito} (Sinal Técnico)
+        msg = f"""{veredito} (Sinal Técnico)
 
 Análise conforme o Prompt Fixo:
 " + "
@@ -149,6 +149,7 @@ Análise conforme o Prompt Fixo:
 Veredito: {veredito}
 Confiança: {confianca}"
 
+"""
     explicacao = await gerar_resposta_ia(msg)
     msg += f"
 
