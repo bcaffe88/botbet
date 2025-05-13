@@ -1,20 +1,17 @@
-# Bot de Refinamento de Sinais com Webhook
+# Bot de Refinamento de Sinais com Webhook e IA
 
-Este bot escuta sinais via Telegram, aplica um sistema de análise com critérios técnicos, e envia um veredito estruturado para um grupo. Ele também monitora odds e envia alerta com link para aposta quando a odd atingir 1.50+.
+Este bot escuta sinais via Telegram, aplica uma análise técnica, envia um veredito estruturado, e usa uma IA para gerar explicações naturais via modelo OpenAssistant.
 
 ## Comandos disponíveis:
 - /start
 - /veredito
-- /testar
-- /testefraco
-- /testevento
-- /id
 
-## Requisitos de Ambiente (Secrets):
+## Secrets necessários (Railway):
 - BOT_TOKEN
 - API_ID
 - API_HASH
 - CHAT_ID_SINAL
 - CHAT_ID_DESTINO
 - ODDS_API_KEY
-- WEBHOOK_URL (ex: https://seu-projeto.up.railway.app)
+- WEBHOOK_URL
+- HF_API_KEY
