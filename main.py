@@ -149,7 +149,7 @@ async def analisar(texto):
 
 """
 """
-    explicacao = await gerar_resposta_ia(msg)
+        explicacao = await gerar_resposta_ia(msg)
 
 🧠 Avaliação IA:
 {explicacao}"
