@@ -143,6 +143,7 @@ Análise conforme o Prompt Fixo:
 ".join(resumo)
 
 📌 Conclusão:
+"""
 {conclusao}
 
 Veredito: {veredito}
