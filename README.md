@@ -1,27 +1,20 @@
-# Bot de Sinais Telegram (Refinador)
+# Bot de Refinamento de Sinais com Webhook
 
-Este é um bot Telegram para receber sinais de futebol, analisar com base em critérios técnicos e enviar vereditos automáticos.
+Este bot escuta sinais via Telegram, aplica um sistema de análise com critérios técnicos, e envia um veredito estruturado para um grupo. Ele também monitora odds e envia alerta com link para aposta quando a odd atingir 1.50+.
 
-## ✔️ Recursos
-- Recebe sinais da Betzord
-- Refina com critérios técnicos (IA, minuto, vento, ataques etc.)
-- Envia para grupo do Telegram
-- Comandos: /start, /veredito, /testar, etc.
+## Comandos disponíveis:
+- /start
+- /veredito
+- /testar
+- /testefraco
+- /testevento
+- /id
 
-## 🚀 Como rodar na Railway
-
-1. Crie conta em https://railway.app
-2. Crie novo projeto > Deploy from GitHub
-3. Adicione os seguintes Secrets:
-
-```
-API_ID = seu valor
-API_HASH = seu valor
-BOT_TOKEN = seu valor
-CHAT_ID_SINAL = -100xxxxxxxxx
-CHAT_ID_DESTINO = -100xxxxxxxxx
-```
-
-4. Railway detectará `Procfile` e iniciará com `python3 main.py`
-
-✅ Rodando 24h em nuvem gratuitamente.
+## Requisitos de Ambiente (Secrets):
+- BOT_TOKEN
+- API_ID
+- API_HASH
+- CHAT_ID_SINAL
+- CHAT_ID_DESTINO
+- ODDS_API_KEY
+- WEBHOOK_URL (ex: https://seu-projeto.up.railway.app)
