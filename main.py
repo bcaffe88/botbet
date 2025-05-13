@@ -4,8 +4,9 @@ from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext
 from telethon.sync import TelegramClient, events
 import asyncio, os, re, aiohttp, time
+from hf_openassistant import gerar_resposta_ia  # IA explicativa
 
-# CONFIGURAÇÃO DO BOT E TELETHON
+# CONFIG
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
@@ -18,9 +19,8 @@ bot = Bot(token=BOT_TOKEN)
 app = Flask(__name__)
 dispatcher = Dispatcher(bot=bot, update_queue=None, use_context=True)
 
-# COMANDOS DO BOT
 def start(update: Update, context: CallbackContext):
-    update.message.reply_text("👋 Bot ativo via Webhook!")
+    update.message.reply_text("👋 Bot com IA via Webhook ativo!")
 
 def veredito_cmd(update: Update, context: CallbackContext):
     texto = (
@@ -48,7 +48,6 @@ def webhook():
 def index():
     return "🤖 Bot com Webhook ativo"
 
-# MONITORAMENTO DE ODD +0.5 HT
 async def monitorar_odd(jogo, link, timeout=300):
     print(f"🔎 Monitorando odd para: {jogo}")
     inicio = time.time()
@@ -78,33 +77,31 @@ async def monitorar_odd(jogo, link, timeout=300):
             print(f"❌ Erro ao monitorar odd: {e}")
             return
 
-# FUNÇÃO DE ANÁLISE DE SINAL
-def analisar_sinal(texto, link):
+async def analisar_sinal(texto, link):
     try:
         jogo = texto.splitlines()[0].replace("⚽️", "").strip()
-        minuto = int(re.search(r'⏰\s*(\d+)[”']', texto).group(1))
-        ia = float(re.search(r'OVER 0\.5 HT:\s*([\d.]+)%', texto).group(1))
-        vento = float(re.search(r'💨\s*([\d.]+)\s*m/s', texto).group(1))
-        perigosos = list(map(int, re.findall(r'Ataques Perigosos:\s*(\d+)/(\d+)', texto)[0]))
+        minuto = int(re.search(r"⏰\s*(\d+)[”'"`]", texto).group(1))
+        ia = float(re.search(r"OVER 0\.5 HT:\s*([\d.]+)%", texto).group(1))
+        vento = float(re.search(r"💨\s*([\d.]+)\s*m/s", texto).group(1))
+        perigosos = list(map(int, re.findall(r"Ataques Perigosos:\s*(\d+)/(\d+)", texto)[0]))
+        posse = list(map(int, re.findall(r"Posse de Bola:\s*(\d+)/(\d+)", texto)[0]))
+        escanteios = sum(map(int, re.findall(r"Escanteios:\s*(\d+)/(\d+)", texto)[0]))
+        chutes = list(map(int, re.findall(r"Total:\s*(\d+)/(\d+)", texto)[0]))
+        no_gol = list(map(int, re.findall(r"No Gol:\s*(\d+)/(\d+)", texto)[0]))
         total_perigosos = sum(perigosos)
         desequilibrio = abs(perigosos[0] - perigosos[1]) >= 7
-        posse = list(map(int, re.findall(r'Posse de Bola:\s*(\d+)/(\d+)', texto)[0]))
         posse_dominante = posse[0] >= 60 or posse[1] >= 60
-        escanteios = sum(map(int, re.findall(r'Escanteios:\s*(\d+)/(\d+)', texto)[0]))
-        chutes = list(map(int, re.findall(r'Total:\s*(\d+)/(\d+)', texto)[0]))
-        no_gol = list(map(int, re.findall(r'No Gol:\s*(\d+)/(\d+)', texto)[0]))
         total_chutes = sum(chutes)
         total_no_gol = sum(no_gol)
 
-        linhas = [f"• IA: {ia:.2f}% {'✅' if ia >= 85 else '❌'} {'✓ OK' if ia >= 85 else 'Abaixo do ideal (85%)'}",
-                  f"• Minuto: {minuto} {'✅' if 18 <= minuto <= 22 else ('⏳' if minuto < 18 else '⚠️')} {'Ideal' if 18 <= minuto <= 22 else 'Aguardando janela ideal'}",
+        linhas = [f"• IA: {ia:.2f}% {'✅' if ia >= 85 else '❌'}",
+                  f"• Minuto: {minuto} {'✅' if 18 <= minuto <= 22 else ('⏳' if minuto < 18 else '⚠️')}",
                   f"• Ataques perigosos: {perigosos[0]} x {perigosos[1]} {'✅' if total_perigosos >= 12 and desequilibrio else '❌'}",
                   f"• Posse de bola: {posse[0]}x{posse[1]} {'✅' if posse_dominante else '⚠️'}",
                   f"• Escanteios: {escanteios} {'✅' if escanteios >= 1 else '❌'}",
                   f"• Finalizações: {total_chutes} | No Gol: {no_gol[0]}x{no_gol[1]} {'✅' if total_no_gol >= 2 else '❌'}",
                   f"• Vento: {vento} m/s {'✅' if 3 <= vento <= 8 else '⚠️'}"]
 
-        # Veredito
         if ia >= 85 and 15 <= minuto <= 35 and total_perigosos >= 12 and desequilibrio and total_chutes >= 3 and total_no_gol >= 2 and escanteios >= 1 and (posse_dominante or total_chutes >= 4):
             decisao = "✅ ENTRAR"
             confianca = "Alta"
@@ -121,14 +118,17 @@ def analisar_sinal(texto, link):
         mensagem += f"\n\n📌 Conclusão:\n{'Situação ideal para entrada com confluência total.' if decisao=='✅ ENTRAR' else 'Cenário ainda incompleto ou fora da janela ideal.'}"
         mensagem += f"\n\nVeredito: {decisao} (Confiança: {confianca})"
 
+        resposta_ia = await gerar_resposta_ia(mensagem)
+        mensagem += f"\n\n🧠 Avaliação IA:\n{resposta_ia}"
+
         if decisao in ["✅ ENTRAR", "⏳ AGUARDAR"]:
             bot.send_message(chat_id=CHAT_ID_DESTINO, text=mensagem, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔗 Apostar agora", url=link)]]))
         else:
             bot.send_message(chat_id=CHAT_ID_DESTINO, text=mensagem)
-    except Exception as e:
-        print(f"❌ Erro ao analisar sinal: {e}")
 
-# TELETHON PARA ESCUTAR O CANAL
+    except Exception as e:
+        print(f"❌ Erro na análise: {e}")
+
 client = TelegramClient('sessao_sinais', API_ID, API_HASH)
 
 @client.on(events.NewMessage())
@@ -136,14 +136,10 @@ async def tratar(event):
     if event.chat_id != CHAT_ID_SINAL:
         return
     if 'OVER 0.5 HT' in event.message.message:
-        try:
-            texto = event.message.message
-            link = "https://bet365.com"  # ou extraído do sinal
-            analisar_sinal(texto, link)
-        except Exception as e:
-            print(f"❌ Erro ao processar sinal: {e}")
+        texto = event.message.message
+        link = "https://bet365.com"
+        await analisar_sinal(texto, link)
 
-# EXECUÇÃO
 if __name__ == "__main__":
     bot.delete_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
