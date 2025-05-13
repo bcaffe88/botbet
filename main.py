@@ -65,7 +65,7 @@ def avaliar_criterios(texto):
     except: resumo.append("• IA: não encontrado ✘""")
 
     try:
-        minuto = int(re.search(r"⏰\s*(\d+)["'`]", texto).group(1))
+        minuto = int(re.search(r"⏰\s*(\d+)[\\"\'`]", texto).group(1))
         if 18 <= minuto <= 27:
             criterios.append("Minuto""")
         resumo.append(f"• Minuto: {minuto} {'✓' if 18 <= minuto <= 27 else '✘'}""")
