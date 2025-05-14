@@ -132,15 +132,15 @@ Confiança: {confianca}
 """
         try:
             explicacao = await gerar_resposta_ia(msg)
-            msg += f"
+            msg += f"""
 
 🧠 Avaliação IA:
-{explicacao}"
+{explicacao}"""
         except Exception as e:
-            msg += f"
+            msg += f"""
 
 🧠 Avaliação IA:
-❌ Erro: {e}"
+❌ Erro: {e}"""
 
         await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
 
