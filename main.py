@@ -172,7 +172,7 @@ Confiança: {confianca}
         except Exception as e:
             msg += f"\n\n🧠 Avaliação IA:\n❌ Erro: {e}"
 
-        bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
+        await asyncio.to_thread(bot.send_message, chat_id=CHAT_ID_DESTINO, text=msg)
 
     except Exception as e:
         print(f"❌ Erro ao analisar: {e}")
