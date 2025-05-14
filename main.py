@@ -206,8 +206,8 @@ async def main():
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
-    client.start()
-    client.run_until_disconnected()
+    await client.start()
+    await client.run_until_disconnected()
 
 if __name__ == "__main__":
     bot.delete_webhook()
