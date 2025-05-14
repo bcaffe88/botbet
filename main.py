@@ -1,11 +1,18 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from telethon.sync import TelegramClient, events
-import os, re, asyncio, aiohttp, time, requests
+import os
+import re
+import time
+import asyncio
+import aiohttp
+import requests
 from bs4 import BeautifulSoup
-from hf_openassistant import gerar_resposta_ia
 
-# CONFIG
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
+from telethon.sync import TelegramClient, events
+from hf_openassistant import gerar_resposta_ia  # IA explicativa (já integrada)
+
+# === VARIÁVEIS DE AMBIENTE ===
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
@@ -13,9 +20,7 @@ CHAT_ID_SINAL = int(os.getenv("CHAT_ID_SINAL"))
 CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"))
 ODDS_API_KEY = os.getenv("ODDS_API_KEY")
 
-bot = Bot(token=BOT_TOKEN)
-
-# Scraping SofaScore
+# === SCRAPING: Histórico 1T do SofaScore ===
 def scraping_gols_1t_sofascore(nome_time):
     try:
         nome_formatado = nome_time.lower().replace(" ", "-")
@@ -38,7 +43,7 @@ def scraping_gols_1t_sofascore(nome_time):
     except:
         return 0
 
-# Monitoramento de Odd
+# === MONITORAR ODD +0.5 HT ===
 async def monitorar_odd(jogo, link, timeout=300):
     url = f"https://api.the-odds-api.com/v4/sports/soccer/odds/?regions=eu&markets=totals&apiKey={ODDS_API_KEY}"
     inicio = time.time()
@@ -57,15 +62,20 @@ async def monitorar_odd(jogo, link, timeout=300):
                                             if linha["point"] == 0.5 and linha["name"] == "Over":
                                                 odd = linha["price"]
                                                 if odd >= 1.50:
-                                                    msg = f"⚽️ ENTRADA VALIDADA\n\n📌 Jogo: {nome}\n📈 Odd +0.5 HT: {odd}\n💰 Valor: R$15"
-                                                    await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg,
-                                                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("👉 Apostar agora", url=link)]]))
+                                                    msg = f"⚽️ ENTRADA VALIDADA\n\n📌 Jogo: {nome}\n📈 Odd +0.5 HT atingiu {odd}\n💰 Valor sugerido: R$15"
+                                                    await application.bot.send_message(
+                                                        chat_id=CHAT_ID_DESTINO,
+                                                        text=msg,
+                                                        reply_markup=InlineKeyboardMarkup([
+                                                            [InlineKeyboardButton("👉 Apostar agora", url=link)]
+                                                        ])
+                                                    )
                                                     return
         except Exception as e:
-            print(f"Erro monitorando odds: {e}")
+            print(f"Erro monitorando odd: {e}")
         await asyncio.sleep(30)
 
-# Análise
+# === ANÁLISE DO SINAL RECEBIDO ===
 async def analisar(texto):
     try:
         jogo = re.search(r'⚽️\s*(.+)', texto).group(1).strip()
@@ -80,6 +90,7 @@ async def analisar(texto):
 
         criterios = []
         resumo = []
+
         total_perigosos = sum(perigosos)
         desequilibrio = abs(perigosos[0] - perigosos[1]) >= 7
         total_no_gol = sum(no_gol)
@@ -88,9 +99,9 @@ async def analisar(texto):
 
         if ia >= 85: criterios.append("IA")
         resumo.append(f"• IA: {ia}% {'✓' if ia >= 85 else '✘'}")
-        if 18 <= minuto <= 27: criterios.append("Minuto")
+        if 18 <= minuto <= 27: criterios.append("Minuto ideal")
         resumo.append(f"• Minuto: {minuto} {'✓' if 18 <= minuto <= 27 else '✘'}")
-        if total_perigosos >= 12 and desequilibrio: criterios.append("Ataques")
+        if total_perigosos >= 12 and desequilibrio: criterios.append("Ataques perigosos")
         resumo.append(f"• Ataques perigosos: {perigosos[0]} x {perigosos[1]} {'✓' if total_perigosos >= 12 and desequilibrio else '✘'}")
         if total_no_gol >= 1: criterios.append("Finalizações no gol")
         resumo.append(f"• Finalizações no gol: {no_gol[0]} x {no_gol[1]} {'✓' if total_no_gol >= 1 else '✘'}")
@@ -106,7 +117,7 @@ async def analisar(texto):
         if len(criterios) >= 3:
             veredito = "✅ ENTRAR"
             confianca = "Alta"
-            conclusao = "Confluência positiva em múltiplos critérios técnicos."
+            conclusao = "Confluência positiva em múltiplos critérios."
             asyncio.create_task(monitorar_odd(jogo, "https://bet365.com"))
         elif 1 <= len(criterios) < 3:
             veredito = "⏳ AGUARDAR"
@@ -116,10 +127,19 @@ async def analisar(texto):
         else:
             veredito = "❌ NÃO ENTRAR"
             confianca = "Baixa"
-            conclusao = "Sinais insuficientes."
+            conclusao = "Sinais insuficientes para entrada."
 
-        msg = f"{veredito} ({jogo})\n\nAnálise conforme o Prompt Fixo:\n" + "\n".join(resumo)
-        msg += f"\n\n📌 Conclusão:\n{conclusao}\n\nVeredito: {veredito}\nConfiança: {confianca}"
+        msg = f"""{veredito} ({jogo})
+
+Análise conforme o Prompt Fixo:
+{chr(10).join(resumo)}
+
+📌 Conclusão:
+{conclusao}
+
+Veredito: {veredito}
+Confiança: {confianca}
+"""
 
         try:
             explicacao = await gerar_resposta_ia(msg)
@@ -127,24 +147,24 @@ async def analisar(texto):
         except Exception as e:
             msg += f"\n\n🧠 Avaliação IA:\n❌ Erro: {e}"
 
-        await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
+        await application.bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
 
     except Exception as e:
-        print("Erro na análise:", e)
+        print("❌ Erro na análise:", e)
 
-# Telegram Commands
+# === COMANDOS /start e /veredito ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("✅ Bot ativo com análise técnica e IA!")
+    await update.message.reply_text("👋 Bot de sinais refinados ativo via polling.")
 
 async def veredito(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("⚙️ Critérios técnicos: IA, minuto, ataques, escanteios, vento, posse, etc.")
+    await update.message.reply_text("⚙️ Critérios técnicos: IA, minuto, ataques perigosos, chutes no gol, escanteios, vento, histórico e posse.")
 
-# Inicializar app
-app = ApplicationBuilder().token(BOT_TOKEN).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("veredito", veredito))
+# === APLICAÇÃO TELEGRAM ===
+application = ApplicationBuilder().token(BOT_TOKEN).build()
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("veredito", veredito))
 
-# Telethon
+# === TELETHON: Escutando canal de sinais ===
 client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 
 @client.on(events.NewMessage())
@@ -152,12 +172,13 @@ async def tratar(event):
     if event.chat_id == CHAT_ID_SINAL and "OVER 0.5 HT" in event.message.message:
         await analisar(event.message.message)
 
+# === EXECUÇÃO PRINCIPAL ===
 if __name__ == "__main__":
     async def main():
-        await app.initialize()
-        await app.start()
-        await app.updater.start_polling()
         await client.start()
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling()
         await client.run_until_disconnected()
 
     asyncio.run(main())
