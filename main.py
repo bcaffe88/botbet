@@ -182,6 +182,7 @@ client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 
 @client.on(events.NewMessage())
 async def tratar(event):
+    print(f"📩 Nova mensagem recebida: {event.chat_id}")
     if event.chat_id != CHAT_ID_SINAL:
         return
     if 'OVER 0.5 HT' in event.message.message:
