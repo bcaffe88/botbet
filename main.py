@@ -121,39 +121,44 @@ def avaliar_criterios(texto):
 
 # FUNÇÃO DE ANÁLISE FINAL
 async def analisar(texto):
-    criterios, resumo = avaliar_criterios(texto)
-    veredito = "❌ NÃO ENTRAR"
-    confianca = "Baixa"
-    conclusao = "Cenário com pouca convergência entre os indicadores."
+    try:
+        criterios, resumo = avaliar_criterios(texto)
 
-    if len(criterios) >= 3:
-        veredito = "✅ ENTRAR"
-        confianca = "Alta"
-        conclusao = "Confluência positiva em múltiplos critérios técnicos."
+        if len(criterios) >= 3:
+            veredito = "✅ ENTRAR"
+            confianca = "Alta"
+            conclusao = "Confluência positiva em múltiplos critérios técnicos."
+        elif 1 <= len(criterios) < 3:
+            veredito = "⏳ AGUARDAR"
+            confianca = "Média"
+            conclusao = "Alguns sinais presentes, mas insuficientes para entrada segura."
+        else:
+            veredito = "❌ NÃO ENTRAR"
+            confianca = "Baixa"
+            conclusao = "Cenário com pouca convergência entre os indicadores."
 
-    elif 1 <= len(criterios) < 3:
-        veredito = "⏳ AGUARDAR"
-        confianca = "Média"
-        conclusao = "Alguns sinais presentes, mas insuficiente para entrada segura."
-
-        
         msg = f"""{veredito} (Sinal Técnico)
-                Análise conforme o Prompt Fixo:
-        {chr(10).join(resumo)}
-                📌 Conclusão:
-        {conclusao}
-                Veredito: {veredito}
-        Confiança: {confianca}
-        """
 
+Análise conforme o Prompt Fixo:
+{chr(10).join(resumo)}
 
-"""
-"""
-        explicacao = await gerar_resposta_ia(msg)
+📌 Conclusão:
+{conclusao}
 
-🧠 Avaliação IA:
-{explicacao}"
-    bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
+Veredito: {veredito}
+Confiança: {confianca}"""
+
+        # Chamada da IA explicativa
+        try:
+            explicacao = await gerar_resposta_ia(msg)
+            msg += f"\n\n🧠 Avaliação IA:\n{explicacao}"
+        except Exception as e:
+            msg += f"\n\n🧠 Avaliação IA:\n❌ Erro: {e}"
+
+        bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
+
+    except Exception as e:
+        print(f"❌ Erro ao analisar: {e}")
 
 # ESCUTA TELETHON
 client = TelegramClient('sessao_sinais', API_ID, API_HASH)
