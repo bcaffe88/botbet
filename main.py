@@ -2,7 +2,7 @@
 # IMPORTS
 from flask import Flask, request
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Dispatcher, CommandHandler, CallbackContext
+from telegram.ext import Application, CommandHandler, ContextTypes
 from telethon.sync import TelegramClient, events
 import asyncio, os, re, aiohttp, time, threading
 from hf_openassistant import gerar_resposta_ia
@@ -17,16 +17,16 @@ CHAT_ID_SINAL = int(os.getenv("CHAT_ID_SINAL"))
 CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"))
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-bot = Bot(token=BOT_TOKEN)
 app = Flask(__name__)
-dispatcher = Dispatcher(bot=bot, update_queue=None, use_context=True)
+bot = Bot(token=BOT_TOKEN)
+application = Application.builder().token(BOT_TOKEN).build()
 
 # COMANDOS
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text("👋 Bot com IA via Webhook ativo!")
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("👋 Bot com IA via Webhook ativo!")
 
-def veredito_cmd(update: Update, context: CallbackContext):
-    update.message.reply_text("""⚙️ Critérios Técnicos de Entrada:
+async def veredito_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("""⚙️ Critérios Técnicos de Entrada:
 - IA ≥ 85%
 - Minuto 18–27
 - 3+ ataques perigosos recentes
@@ -36,13 +36,12 @@ def veredito_cmd(update: Update, context: CallbackContext):
 - Histórico gols 1T ≥ 2 (últimos 5 jogos)
 - Visitante dominante""")
 
-dispatcher.add_handler(CommandHandler("veredito", veredito_cmd))
-dispatcher.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("veredito", veredito_cmd))
 
 @app.route("/webhook", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
-    dispatcher.process_update(update)
+async def webhook():
+    await application.update_queue.put(Update.de_json(request.get_json(force=True), bot))
     return "ok"
 
 @app.route("/")
@@ -153,12 +152,11 @@ def avaliar_criterios(texto, jogo):
 
     return criterios, resumo
 
-# === ANÁLISE COMPLETA ===
+# ANÁLISE FINAL
 async def analisar(texto):
     try:
         jogo_match = re.search(r'⚽️\s*(.+)', texto)
         jogo = jogo_match.group(1).strip() if jogo_match else "Times não encontrados"
-
         criterios, resumo = avaliar_criterios(texto, jogo)
 
         if len(criterios) >= 3:
@@ -192,12 +190,12 @@ Confiança: {confianca}
         except Exception as e:
             msg += f"\n\n🧠 Avaliação IA:\n❌ Erro da IA: {e}"
 
-        bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
+        await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
 
     except Exception as erro:
         print("❌ Erro na análise:", erro)
 
-# === ESCUTA TELETHON ===
+# ESCUTA DE SINAIS - TELETHON
 client = TelegramClient('sessao_sinais', API_ID, API_HASH)
 
 @client.on(events.NewMessage())
@@ -207,12 +205,15 @@ async def tratar(event):
     if 'OVER 0.5 HT' in event.message.message:
         await analisar(event.message.message)
 
-def rodar_flask():
-    app.run(host="0.0.0.0", port=8080)
-
-if __name__ == "__main__":
+# EXECUÇÃO COMBINADA
+async def main():
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
     bot.delete_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
-    threading.Thread(target=rodar_flask).start()
     client.start()
     client.run_until_disconnected()
+
+if __name__ == "__main__":
+    asyncio.run(main())
