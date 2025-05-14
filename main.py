@@ -70,11 +70,6 @@ async def analisar(texto, link="https://bet365.com"):
         total_no_gol = sum(no_gol)
         posse_dominante = posse[0] >= 60 or posse[1] >= 60
 
-        historico = 2  # Simulado
-
-        criterios = []
-        resumo = []
-
         if ia >= 85: criterios.append("IA")
         resumo.append(f"• IA: {ia:.2f}% {'✓' if ia >= 85 else '✘'}")
         if minuto and 18 <= minuto <= 27: criterios.append("Minuto")
@@ -134,7 +129,7 @@ Confiança: {confianca}
 client = TelegramClient('sessao_sinais', API_ID, API_HASH)
 
 @client.on(events.NewMessage())
-async def escutar(event):
+async def tratar (event):
     if event.chat_id == CHAT_ID_SINAL and "OVER 0.5 HT" in event.message.message:
         await analisar(event.message.message)
 
@@ -146,7 +141,5 @@ if __name__ == "__main__":
     bot.delete_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
     threading.Thread(target=rodar_flask).start()
-    client.start()
-    client.run_until_disconnected()
     client.start()
     client.run_until_disconnected()
