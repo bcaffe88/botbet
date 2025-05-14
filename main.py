@@ -13,7 +13,6 @@ API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 CHAT_ID_SINAL = int(os.getenv("CHAT_ID_SINAL"))
 CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"))
-ODDS_API_KEY = os.getenv("ODDS_API_KEY")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 bot = Bot(token=BOT_TOKEN)
@@ -47,35 +46,6 @@ def webhook():
 @app.route("/")
 def index():
     return "🏠 Webhook do bot está funcionando"
-
-# MONITORAMENTO DE ODDS
-async def monitorar_odd(jogo, link, timeout=300):
-    url = f"https://api.the-odds-api.com/v4/sports/soccer/odds/?regions=eu&markets=totals&apiKey={ODDS_API_KEY}"
-    inicio = asyncio.get_event_loop().time()
-    while True:
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as resp:
-                    data = await resp.json()
-                    for partida in data:
-                        nome = partida.get("home_team", "") + " x " + partida.get("away_team", "")
-                        if jogo.lower() in nome.lower():
-                            for bk in partida.get("bookmakers", []):
-                                for mkt in bk.get("markets", []):
-                                    if mkt["key"] == "totals":
-                                        for linha in mkt["outcomes"]:
-                                            if linha["point"] == 0.5 and linha["name"] == "Over":
-                                                odd = linha["price"]
-                                                if odd >= 1.50:
-                                                    msg = f"⚽️ ENTRADA VALIDADA\n\n📌 Jogo: {nome}\n📈 Odd +0.5 HT: {odd}\n💰 Valor: R$15"
-                                                    bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("👉 Apostar agora", url=link)]]))
-                                                    return
-            await asyncio.sleep(30)
-            if asyncio.get_event_loop().time() - inicio > timeout:
-                return
-        except Exception as e:
-            print(f"❌ Erro ao monitorar odd: {e}")
-            return
 
 # ANÁLISE PRINCIPAL
 async def analisar(texto, link="https://bet365.com"):
@@ -176,5 +146,7 @@ if __name__ == "__main__":
     bot.delete_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
     threading.Thread(target=rodar_flask).start()
+    client.start()
+    client.run_until_disconnected()
     client.start()
     client.run_until_disconnected()
