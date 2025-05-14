@@ -55,11 +55,11 @@ async def monitorar_odd(jogo, link, timeout=300):
                                             if linha["point"] == 0.5 and linha["name"] == "Over":
                                                 odd = linha["price"]
                                                 if odd >= 1.50:
-                                                    msg = f"⚽️ ENTRADA VALIDADA
+                                                    msg = f"""⚽️ ENTRADA VALIDADA
 
 📌 Jogo: {nome}
 📈 Odd +0.5 HT: {odd}
-💰 Valor sugerido: R$15"
+💰 Valor sugerido: R$15"""
                                                     await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg,
                                                         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("👉 Apostar agora", url=link)]]))
                                                     return
