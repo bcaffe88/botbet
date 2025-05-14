@@ -26,8 +26,9 @@ dispatcher = Dispatcher(bot=bot, update_queue=None, use_context=True)
 
 # COMANDOS
 def start(update: Update, context: CallbackContext):
-    update.message.reply_text("✅ Bot ativo com critérios refinados e IA.""")
+    update.message.reply_text("👋 Bot com IA via Webhook ativo!")
 
+dispatcher.add_handler(CommandHandler("start", start))
 
 def veredito_cmd(update: Update, context: CallbackContext):
     update.message.reply_text("""⚙️ Critérios Técnicos de Entrada:
