@@ -28,8 +28,6 @@ dispatcher = Dispatcher(bot=bot, update_queue=None, use_context=True)
 def start(update: Update, context: CallbackContext):
     update.message.reply_text("👋 Bot com IA via Webhook ativo!")
 
-dispatcher.add_handler(CommandHandler("start", start))
-
 def veredito_cmd(update: Update, context: CallbackContext):
     update.message.reply_text("""⚙️ Critérios Técnicos de Entrada:
 - IA ≥ 85%
@@ -42,6 +40,7 @@ def veredito_cmd(update: Update, context: CallbackContext):
 - Visitante dominante""")
 
 dispatcher.add_handler(CommandHandler("veredito", veredito_cmd))
+dispatcher.add_handler(CommandHandler("start", start))
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
