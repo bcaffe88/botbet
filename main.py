@@ -1,14 +1,46 @@
-# Arquivo reconstruído após reset — função analisar incluída
-# Adicione o restante do código conforme necessário antes ou depois deste bloco
-
-import re
 import os
+import re
+import requests
+from bs4 import BeautifulSoup
 from telegram import Bot
 
 CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"))
 bot = Bot(token=os.getenv("BOT_TOKEN"))
 
-async def gerar_resposta_ia(mensagem): return "Exemplo de resposta da IA"  # Simulado para testes
+async def gerar_resposta_ia(msg): return "Simulação IA ativa"
+
+def scraping_gols_1t_sofascore(nome_time):
+    try:
+        nome_formatado = nome_time.lower().replace(" ", "-")
+        url = f"https://www.sofascore.com/team/football/{nome_formatado}/"
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
+
+        if r.status_code != 200:
+            return 0
+
+        soup = BeautifulSoup(r.text, 'html.parser')
+        partidas = soup.find_all("a", href=True)
+        contagem = 0
+        max_jogos = 5
+
+        for link in partidas:
+            if "/" in link['href'] and "match" in link['href'] and contagem < max_jogos:
+                partida_url = "https://www.sofascore.com" + link['href']
+                jogo_html = requests.get(partida_url, headers={"User-Agent": "Mozilla/5.0"})
+                jogo_soup = BeautifulSoup(jogo_html.text, 'html.parser')
+
+                score_tag = jogo_soup.find("div", {"class": "scoreBox__score"})
+                if score_tag:
+                    placar = score_tag.get_text().strip()
+                    if placar and "(" in placar:
+                        placar_1t = placar.split("(")[-1].replace(")", "").split(":")
+                        gols_time = int(placar_1t[0])
+                        contagem += gols_time
+
+        return contagem
+    except Exception as e:
+        print("Erro ao coletar histórico no SofaScore:", e)
+        return 0
 
 async def analisar(texto):
     try:
@@ -63,7 +95,11 @@ async def analisar(texto):
             criterios.append("Vento favorável")
         resumo.append(f"• Vento: {vento if vento else 'não encontrado'} m/s {'✓' if vento and vento < 20 else '✘'}")
 
-        historico = 2
+        # DOMINANTE
+        time_dominante = "mandante" if posse[0] > posse[1] else "visitante"
+        nome_time_dominante = jogo.split(" x ")[0].strip() if time_dominante == "mandante" else jogo.split(" x ")[1].strip()
+        historico = scraping_gols_1t_sofascore(nome_time_dominante)
+
         if historico >= 2:
             criterios.append("Histórico de gols 1T")
         resumo.append(f"• Histórico recente da equipe dominante: {historico} {'✓' if historico >= 2 else '✘'}")
