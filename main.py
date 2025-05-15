@@ -198,10 +198,10 @@ async def tratar(event):
         return
 
     if re.search(r"OVER\s*0\.5\s*HT", event.message.message, re.IGNORECASE):
-    print("✅ Palavra-chave detectada, sinal será analisado.")
-    await analisar(event.message.message)
-else:
-    print("⚠️ Mensagem ignorada (sem OVER 0.5 HT).")
+        print("✅ Palavra-chave detectada, sinal será analisado.")
+        await analisar(event.message.message)
+    else:
+        print("⚠️ Mensagem ignorada (sem OVER 0.5 HT).")
 
 # RODAR FLASK + TELETHON
 def rodar_flask():
