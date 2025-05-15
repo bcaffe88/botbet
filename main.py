@@ -133,8 +133,15 @@ client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 
 @client.on(events.NewMessage())
 async def escutar(event):
-    if event.chat_id == CHAT_ID_SINAL and "OVER 0.5 HT" in event.message.message:
+    print(f"📨 Mensagem recebida de {event.chat_id}:")
+    print(f"🔍 CHAT_ID recebido: {event.chat_id}")
+    print(event.message.message)
+
+    if str(event.chat_id) == str(CHAT_ID_SINAL) and "OVER 0.5 HT" in event.message.message:
+        print("✅ Sinal detectado, enviando para análise.")
         await analisar(event.message.message)
+    else:
+        print("⚠️ Mensagem ignorada (ID ou palavra-chave não conferem).")
 
 # Inicialização final correta
 if __name__ == "__main__":
