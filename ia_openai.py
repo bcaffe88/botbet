@@ -1,12 +1,12 @@
-import openai
 import os
+import asyncio
+from openai import OpenAI
 
-# Define a chave da API da OpenAI
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def gerar_resposta_ia(mensagem_usuario):
+async def gerar_resposta_ia(mensagem_usuario):
     try:
-        resposta = openai.ChatCompletion.create(
+        resposta = await asyncio.to_thread(client.chat.completions.create,
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Você é um analista esportivo técnico com foco em sinais ao vivo."},
@@ -15,6 +15,6 @@ def gerar_resposta_ia(mensagem_usuario):
             temperature=0.7,
             max_tokens=300
         )
-        return resposta['choices'][0]['message']['content'].strip()
+        return resposta.choices[0].message.content.strip()
     except Exception as e:
         return f"❌ Erro na IA OpenAI: {e}"
