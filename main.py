@@ -196,11 +196,11 @@ async def tratar(event):
         print("🚫 Ignorado: chat_id diferente")
         return
 
-    if "over 0.5 ht" in event.message.message.lower():
-        print("✅ Critério encontrado, chamando analisar...")
-        await analisar(event.message.message)
-    else:
-        print("⚠️ Mensagem não contém 'over 0.5 ht'")
+    if re.search(r"OVER\s*0\.5\s*HT", event.message.message, re.IGNORECASE):
+    print("✅ Palavra-chave detectada, sinal será analisado.")
+    await analisar(event.message.message)
+else:
+    print("⚠️ Mensagem ignorada (sem OVER 0.5 HT).")
 
 # RODAR FLASK + TELETHON
 def rodar_flask():
