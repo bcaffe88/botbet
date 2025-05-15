@@ -2,7 +2,7 @@
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from telethon.sync import TelegramClient, events
+from telethon import TelegramClient, events
 import os, re, asyncio, aiohttp, time
 from ia_openai import gerar_resposta_ia
 
@@ -179,5 +179,5 @@ async def iniciar_bot():
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.create_task(iniciar_bot())
-    loop.create_task(client.start())
+    loop.create_task(client.start()) 
     loop.run_until_complete(client.run_until_disconnected())
