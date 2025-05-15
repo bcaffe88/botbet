@@ -5,8 +5,7 @@ from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext
 from telethon.sync import TelegramClient, events
 import os, re, asyncio, aiohttp, time, threading
-from hf_openassistant import gerar_resposta_ia
-from hf_ia_sync import gerar_resposta_ia_sync
+from ia_openai import gerar_resposta_ia
 
 # VARIÁVEIS DE AMBIENTE
 BOT_TOKEN = os.getenv("BOT_TOKEN")
