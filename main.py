@@ -193,7 +193,8 @@ async def tratar(event):
     print(f"🔍 Conteúdo da mensagem:\n{event.message.message}")
 
     if event.chat_id != CHAT_ID_SINAL:
-        print("🚫 Ignorado: chat_id diferente")
+        print(f"🔍 CHAT_ID recebido: {event.chat_id}")
+        print(f"🔐 CHAT_ID esperado: {CHAT_ID_SINAL}")
         return
 
     if re.search(r"OVER\s*0\.5\s*HT", event.message.message, re.IGNORECASE):
