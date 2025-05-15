@@ -39,7 +39,7 @@ Entrada apenas com 3 ou mais critérios.""")
 
 def teste_ia(update: Update, context: CallbackContext):
     texto_usuario = update.message.text.replace("/testeia", "").strip()
-    resposta = asyncio.run(gerar_resposta_ia(texto_usuario))
+    resposta = gerar_resposta_ia(texto_usuario)
     update.message.reply_text(f"🧠 IA respondeu:\n\n{resposta}")
         
 dispatcher.add_handler(CommandHandler("start", start))
