@@ -2,7 +2,7 @@
 
 from flask import Flask, request
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Dispatcher, CommandHandler, CallbackContext, ContextTypes
+from telegram.ext import Dispatcher, CommandHandler, CallbackContext
 from telethon.sync import TelegramClient, events
 import os, re, asyncio, aiohttp, time, threading
 from hf_openassistant import gerar_resposta_ia
@@ -37,7 +37,7 @@ def veredito_cmd(update: Update, context: CallbackContext):
 - Visitante dominante
 Entrada apenas com 3 ou mais critérios.""")
 
-async def teste_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def teste_ia(update, context):
     await update.message.reply_text("⏳ Testando resposta da IA, aguarde...")
     try:
         prompt = "Explique brevemente por que a posse de bola é importante em um jogo de futebol."
