@@ -32,6 +32,14 @@ async def veredito(update: Update, context: ContextTypes.DEFAULT_TYPE):
 - Visitante dominante
 Entrada apenas com 3 ou mais critérios.""")
 
+async def teste_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🔍 Testando IA, aguarde...")
+    try:
+        resposta = await gerar_resposta_ia("Teste de resposta da IA. Você está funcionando?")
+        await update.message.reply_text(f"🧠 Resposta da IA:\n{resposta}")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Erro ao testar IA:\n{e}")
+
 # Odds
 async def monitorar_odd(jogo, link, timeout=300):
     url = f"https://api.the-odds-api.com/v4/sports/soccer/odds/?regions=eu&markets=totals&apiKey={ODDS_API_KEY}"
@@ -150,5 +158,5 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("veredito", veredito))
     app.add_handler(CommandHandler("testeia", teste_ia))
 
-    client.start()  # inicia o telethon
-    app.run_polling()  # inicia polling do Telegram
+    client.start()  # inicia o Telethon
+    app.run_polling()  # inicia polling do bot
