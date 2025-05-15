@@ -2,8 +2,8 @@ from openai import OpenAI
 import os
 import asyncio
 
-# Autenticação via variável de ambiente
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Cria o cliente corretamente sem argumentos inválidos
+client = OpenAI()
 
 async def gerar_resposta_ia(mensagem_usuario):
     try:
