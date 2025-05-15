@@ -1,12 +1,14 @@
+from openai import OpenAI
 import os
 import asyncio
-from openai import OpenAI
 
+# Autenticação via variável de ambiente
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 async def gerar_resposta_ia(mensagem_usuario):
     try:
-        resposta = await asyncio.to_thread(client.chat.completions.create,
+        resposta = await asyncio.to_thread(
+            client.chat.completions.create,
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Você é um analista esportivo técnico com foco em sinais ao vivo."},
