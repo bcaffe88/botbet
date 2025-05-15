@@ -136,12 +136,11 @@ async def escutar(event):
     if event.chat_id == CHAT_ID_SINAL and "OVER 0.5 HT" in event.message.message:
         await analisar(event.message.message)
 
-# Inicialização
+# Inicialização final correta
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("veredito", veredito))
-    loop = asyncio.get_event_loop()
-    loop.create_task(client.start())
-    loop.create_task(app.run_polling())
-    loop.run_forever()
+    
+    client.start()  # Síncrono, sem await
+    asyncio.run(app.run_polling())
