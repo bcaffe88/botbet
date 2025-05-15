@@ -164,16 +164,19 @@ async def main():
     await app.run_polling()
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.create_task(client.start())
-    loop.create_task(client.run_until_disconnected())
-    
+    from telegram.ext import ApplicationBuilder, CommandHandler
+
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("veredito", veredito))
     application.add_handler(CommandHandler("testeia", teste_ia))
-    
-    loop.run_until_complete(application.initialize())
-    loop.run_until_complete(application.start())
-    loop.run_until_complete(application.updater.start_polling())
-    loop.run_forever()
+
+    async def iniciar():
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling()
+
+    loop = asyncio.get_event_loop()
+    loop.create_task(iniciar())
+    loop.create_task(client.start())
+    loop.run_until_complete(client.run_until_disconnected())
