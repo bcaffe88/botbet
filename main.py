@@ -38,9 +38,8 @@ def veredito_cmd(update: Update, context: CallbackContext):
 Entrada apenas com 3 ou mais critérios.""")
 
 def teste_ia(update: Update, context: CallbackContext):
-    texto_usuario = update.message.text.replace("/testeia", "").strip()
-    resposta = gerar_resposta_ia(texto_usuario)
-    update.message.reply_text(f"🧠 IA respondeu:\n\n{resposta}")
+    print("🟢 TESTEIA FOI ACIONADO!")
+    update.message.reply_text("🔍 Comando recebido.")
         
 dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(CommandHandler("veredito", veredito_cmd))
