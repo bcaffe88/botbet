@@ -173,7 +173,7 @@ Confiança: {confianca}
 """
 
         try:
-    explicacao = await gerar_resposta_ia(msg)
+    explicacao = gerar_resposta_ia(msg)
     msg += f"\n\n🧠 Avaliação IA:\n{explicacao}"
 except Exception as e:
     msg += f"\n\n🧠 Avaliação IA:\n❌ Erro: {e}"
