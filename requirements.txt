@@ -6,4 +6,4 @@ requests==2.31.0
 beautifulsoup4==4.12.3
 urllib3==1.26.15
 six==1.16.0
-openai==0.28
+openai==1.14.2
