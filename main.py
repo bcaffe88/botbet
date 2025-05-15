@@ -37,8 +37,18 @@ def veredito_cmd(update: Update, context: CallbackContext):
 - Visitante dominante
 Entrada apenas com 3 ou mais critérios.""")
 
+async def teste_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("⏳ Testando resposta da IA, aguarde...")
+    try:
+        prompt = "Explique brevemente por que a posse de bola é importante em um jogo de futebol."
+        resposta = await gerar_resposta_ia(prompt)
+        await update.message.reply_text(f"🧠 Resposta IA:\n{resposta}")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Erro ao testar IA: {e}")
+        
 dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(CommandHandler("veredito", veredito_cmd))
+dispatcher.add_handler(CommandHandler("testeia", teste_ia))
 
 # ROTAS FLASK
 @app.route("/webhook", methods=["POST"])
