@@ -1,4 +1,4 @@
-# main.py — Bot com Polling + Telethon + IA via OpenAI
+# main.py - Sinais refinados com polling e telethon
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
@@ -6,7 +6,7 @@ from telethon import TelegramClient, events
 import os, re, asyncio, aiohttp, time
 from ia_openai import gerar_resposta_ia
 
-# 🔐 Variáveis de ambiente
+# Configurações
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
@@ -16,7 +16,23 @@ ODDS_API_KEY = os.getenv("ODDS_API_KEY")
 
 bot = Bot(token=BOT_TOKEN)
 
-# 📈 Monitoramento de odds ao vivo
+# Comandos
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🤖 Bot de sinais refinados ativo com polling!")
+
+async def veredito(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("""⚙️ Critérios Técnicos de Entrada:
+- IA ≥ 85%
+- Minuto 18–27
+- 3+ ataques perigosos recentes
+- 1+ chute no gol
+- Escanteios ≥ 2
+- Vento < 20 m/s
+- Histórico gols 1T ≥ 2 (últimos 5 jogos)
+- Visitante dominante
+Entrada apenas com 3 ou mais critérios.""")
+
+# Odds
 async def monitorar_odd(jogo, link, timeout=300):
     url = f"https://api.the-odds-api.com/v4/sports/soccer/odds/?regions=eu&markets=totals&apiKey={ODDS_API_KEY}"
     inicio = time.time()
@@ -36,80 +52,62 @@ async def monitorar_odd(jogo, link, timeout=300):
                                                 odd = linha["price"]
                                                 if odd >= 1.50:
                                                     msg = f"⚽️ ENTRADA VALIDADA\n\n📌 Jogo: {nome}\n📈 Odd +0.5 HT: {odd}\n💰 Valor sugerido: R$15"
-                                                    await bot.send_message(
-                                                        chat_id=CHAT_ID_DESTINO,
-                                                        text=msg,
-                                                        reply_markup=InlineKeyboardMarkup(
-                                                            [[InlineKeyboardButton("👉 Apostar agora", url=link)]]
-                                                        )
-                                                    )
+                                                    await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg,
+                                                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("👉 Apostar agora", url=link)]]))
                                                     return
         except Exception as e:
             print("❌ Erro monitorando odd:", e)
         await asyncio.sleep(30)
 
-# 📊 Análise do sinal
+# Análise
 async def analisar(texto):
     try:
-        jogo = re.search(r'⚽️\s*(.+)', texto).group(1).strip()
-        minuto = int(re.search(r"⏰\s*(\d+)", texto).group(1))
-        ia = float(re.search(r"OVER 0\.5 HT:\s*([\d.]+)%", texto).group(1))
+        jogo = re.search(r'⚽️\s*(.+)', texto)
+        jogo = jogo.group(1).strip() if jogo else "Times não identificados"
+        minuto = int(re.search(r"⏰\s*(\d+)", texto).group(1)) if "⏰" in texto else None
+        ia = float(re.search(r"OVER 0\.5 HT:\s*([\d.]+)%", texto).group(1)) if "OVER 0.5 HT" in texto else None
         perigosos = list(map(int, re.findall(r"Ataques Perigosos:\s*(\d+)/(\d+)", texto)[0]))
         posse = list(map(int, re.findall(r"Posse de Bola:\s*(\d+)/(\d+)", texto)[0]))
         escanteios = list(map(int, re.findall(r"Escanteios:\s*(\d+)/(\d+)", texto)[0]))
         chutes = list(map(int, re.findall(r"Total:\s*(\d+)/(\d+)", texto)[0]))
         no_gol = list(map(int, re.findall(r"No Gol:\s*(\d+)/(\d+)", texto)[0]))
-        vento = float(re.search(r"💨\s*([\d.]+)\s*m/s", texto).group(1))
+        vento = float(re.search(r"💨\s*([\d.]+)\s*m/s", texto).group(1)) if "💨" in texto else None
 
+        criterios, resumo = [], []
+        if ia and ia >= 85: criterios.append("IA")
+        resumo.append(f"• IA: {ia:.2f}% {'✓' if ia and ia >= 85 else '✘'}")
+        if minuto and 18 <= minuto <= 27: criterios.append("Minuto ideal")
+        resumo.append(f"• Minuto: {minuto} {'✓' if minuto and 18 <= minuto <= 27 else '✘'}")
         total_perigosos = sum(perigosos)
-        total_no_gol = sum(no_gol)
-        posse_dominante = posse[0] >= 60 or posse[1] >= 60
         desequilibrio = abs(perigosos[0] - perigosos[1]) >= 7
-        historico = 2  # mock fixo ou futura função com scraping
-
-        criterios = []
-        resumo = []
-
-        if ia >= 85: criterios.append("IA")
-        resumo.append(f"• IA: {ia}% {'✓' if ia >= 85 else '✘'}")
-
-        if 18 <= minuto <= 27: criterios.append("Minuto")
-        resumo.append(f"• Minuto: {minuto} {'✓' if 18 <= minuto <= 27 else '✘'}")
-
-        if total_perigosos >= 12 and desequilibrio: criterios.append("Ataques")
+        if total_perigosos >= 12 and desequilibrio: criterios.append("Ataques perigosos")
         resumo.append(f"• Ataques perigosos: {perigosos[0]} x {perigosos[1]} {'✓' if total_perigosos >= 12 and desequilibrio else '✘'}")
-
-        if total_no_gol >= 1: criterios.append("Chutes no gol")
-        resumo.append(f"• Finalizações no gol: {no_gol[0]} x {no_gol[1]} {'✓' if total_no_gol >= 1 else '✘'}")
-
+        if sum(no_gol) >= 1: criterios.append("Finalizações")
+        resumo.append(f"• Finalizações no gol: {no_gol[0]} x {no_gol[1]} {'✓' if sum(no_gol) >= 1 else '✘'}")
         if sum(escanteios) >= 2: criterios.append("Escanteios")
         resumo.append(f"• Escanteios: {escanteios[0]} x {escanteios[1]} {'✓' if sum(escanteios) >= 2 else '✘'}")
-
-        if vento < 20: criterios.append("Vento")
-        resumo.append(f"• Vento: {vento} m/s {'✓' if vento < 20 else '✘'}")
-
-        if historico >= 2: criterios.append("Histórico 1T")
-        resumo.append(f"• Histórico 1T: {historico} {'✓' if historico >= 2 else '✘'}")
-
+        if vento and vento < 20: criterios.append("Vento ideal")
+        resumo.append(f"• Vento: {vento} m/s {'✓' if vento and vento < 20 else '✘'}")
+        if sum(chutes) >= 4: criterios.append("Chutes totais")
+        posse_dominante = posse[0] >= 60 or posse[1] >= 60
         if posse_dominante: criterios.append("Posse dominante")
-        resumo.append(f"• Posse: {posse[0]} x {posse[1]} {'✓' if posse_dominante else '✘'}")
+        resumo.append(f"• Posse: {posse[0]}% x {posse[1]}% {'✓' if posse_dominante else '✘'}")
 
         if len(criterios) >= 3:
             veredito = "✅ ENTRAR"
             confianca = "Alta"
-            conclusao = "Confluência positiva em múltiplos critérios."
+            conclusao = "Cenário ideal com múltiplos critérios técnicos atendidos."
             asyncio.create_task(monitorar_odd(jogo, "https://bet365.com"))
-        elif len(criterios) >= 1:
+        elif len(criterios) == 2:
             veredito = "⏳ AGUARDAR"
             confianca = "Média"
-            conclusao = "Critérios parciais."
-            asyncio.create_task(monitorar_odd(jogo, "https://bet365.com"))
+            conclusao = "Critérios parciais, cenário ainda incompleto."
         else:
             veredito = "❌ NÃO ENTRAR"
             confianca = "Baixa"
-            conclusao = "Cenário sem força técnica."
+            conclusao = "Falta de confluência entre os critérios."
 
-        msg = f"""{veredito} ({jogo})
+        msg = f"""{veredito} (Sinal Técnico) – {jogo}
 
 Análise conforme o Prompt Fixo:
 {chr(10).join(resumo)}
@@ -120,64 +118,30 @@ Análise conforme o Prompt Fixo:
 Veredito: {veredito}
 Confiança: {confianca}
 """
-
-        ia_explica = await gerar_resposta_ia(msg)
-        msg += f"\n\n🧠 Avaliação IA:\n{ia_explica}"
+        try:
+            explicacao = await gerar_resposta_ia(msg)
+            msg += f"\n\n🧠 Avaliação IA:\n{explicacao}"
+        except Exception as e:
+            msg += f"\n\n🧠 Avaliação IA:\n❌ Erro: {e}"
 
         await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
-
     except Exception as e:
-        print("❌ Erro na análise:", e)
+        print("❌ Erro ao analisar:", e)
 
-# 🔁 Telethon - Escuta
+# TELETHON
 client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 
 @client.on(events.NewMessage())
 async def escutar(event):
-    if event.chat_id != CHAT_ID_SINAL:
-        return
-    if "OVER 0.5 HT" in event.message.message:
+    if event.chat_id == CHAT_ID_SINAL and "OVER 0.5 HT" in event.message.message:
         await analisar(event.message.message)
 
-# 📎 Comandos do Telegram
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🤖 Bot de sinais refinados ativo via polling!")
-
-async def veredito(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📊 Critérios: IA, minuto, ataques, posse, escanteios, vento, histórico 1T...")
-
-async def teste_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    texto = " ".join(context.args)
-    resposta = await gerar_resposta_ia(texto)
-    await update.message.reply_text(f"🧠 IA:\n{resposta}")
-
-# ▶️ RODAR POLLING + TELETHON
-async def main():
+# Inicialização
+if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("veredito", veredito))
-    app.add_handler(CommandHandler("testeia", teste_ia))
-
-    await app.bot.delete_webhook(drop_pending_updates=True)
-    await client.start()
-    asyncio.create_task(client.run_until_disconnected())
-    await app.run_polling()
-
-from telegram.ext import ApplicationBuilder, CommandHandler
-
-application = ApplicationBuilder().token(BOT_TOKEN).build()
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("veredito", veredito))
-application.add_handler(CommandHandler("testeia", teste_ia))
-
-async def iniciar_bot():
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
-
-# Início simultâneo do Telegram + Telethon
-if __name__ == "__main__":
     loop = asyncio.get_event_loop()
-    loop.create_task(iniciar_bot())
-    loop.create_task(client.start()) 
-    loop.run_until_complete(client.run_until_disconnected())
+    loop.create_task(client.start())
+    loop.create_task(app.run_polling())
+    loop.run_forever()
