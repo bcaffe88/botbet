@@ -101,15 +101,17 @@ async def analisar(texto):
         escanteios = list(map(int, re.findall(r"Escanteios:\s*(\d+)/(\d+)", texto)[0]))
         chutes = list(map(int, re.findall(r"Total:\s*(\d+)/(\d+)", texto)[0]))
         no_gol = list(map(int, re.findall(r"No Gol:\s*(\d+)/(\d+)", texto)[0]))
+
         vento_match = re.search(r"💨\s*([\d.]+)\s*m/s", texto)
         vento = float(vento_match.group(1)) if vento_match else None
+
+        # Simulação de histórico (mock fixo por enquanto)
+        historico = 2
 
         total_perigosos = sum(perigosos)
         total_no_gol = sum(no_gol)
         posse_dominante = posse[0] >= 60 or posse[1] >= 60
         desequilibrio = abs(perigosos[0] - perigosos[1]) >= 7
-
-        historico = 2  # fixo por enquanto
 
         criterios = []
         resumo = []
@@ -135,7 +137,7 @@ async def analisar(texto):
         resumo.append(f"• Escanteios: {escanteios[0]} x {escanteios[1]} {'✓' if sum(escanteios) >= 2 else '✘'}")
 
         if vento is not None and vento < 20:
-            criterios.append("Vento favorável")
+            criterios.append("Vento ideal")
         resumo.append(f"• Vento: {vento} m/s {'✓' if vento < 20 else '✘'}")
 
         if historico >= 2:
@@ -146,6 +148,7 @@ async def analisar(texto):
             criterios.append("Posse dominante")
         resumo.append(f"• Posse: {posse[0]}% x {posse[1]}% {'✓' if posse_dominante else '✘'}")
 
+        # Veredito
         if len(criterios) >= 3:
             veredito = "✅ ENTRAR"
             confianca = "Alta"
@@ -154,12 +157,14 @@ async def analisar(texto):
         elif 1 <= len(criterios) < 3:
             veredito = "⏳ AGUARDAR"
             confianca = "Média"
-            conclusao = "Critérios parciais, aguardar evolução."
+            conclusao = "Critérios parciais, aguardar evolução do jogo."
+            asyncio.create_task(monitorar_odd(jogo, "https://bet365.com"))
         else:
             veredito = "❌ NÃO ENTRAR"
             confianca = "Baixa"
-            conclusao = "Sinais insuficientes."
+            conclusao = "Sinais insuficientes para entrada segura."
 
+        # Monta mensagem
         msg = f"""{veredito} (Sinal Técnico) – {jogo}
 
 Análise conforme o Prompt Fixo:
@@ -172,11 +177,11 @@ Veredito: {veredito}
 Confiança: {confianca}
 """
 
-    try:
-        explicacao = await gerar_resposta_ia(msg)
-        msg += f"\n\n🧠 Avaliação IA:\n{explicacao}"
-    except Exception as e:
-        msg += f"\n\n🧠 Avaliação IA:\n❌ Erro: {e}"
+        try:
+            explicacao = gerar_resposta_ia(msg)
+            msg += f"\n\n🧠 Avaliação IA:\n{explicacao}"
+        except Exception as e:
+            msg += f"\n\n🧠 Avaliação IA:\n❌ Erro: {e}"
 
         await asyncio.to_thread(bot.send_message, chat_id=CHAT_ID_DESTINO, text=msg)
 
