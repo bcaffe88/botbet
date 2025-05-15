@@ -163,20 +163,21 @@ async def main():
     asyncio.create_task(client.run_until_disconnected())
     await app.run_polling()
 
+from telegram.ext import ApplicationBuilder, CommandHandler
+
+application = ApplicationBuilder().token(BOT_TOKEN).build()
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("veredito", veredito))
+application.add_handler(CommandHandler("testeia", teste_ia))
+
+async def iniciar_bot():
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+
+# Início simultâneo do Telegram + Telethon
 if __name__ == "__main__":
-    from telegram.ext import ApplicationBuilder, CommandHandler
-
-    application = ApplicationBuilder().token(BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("veredito", veredito))
-    application.add_handler(CommandHandler("testeia", teste_ia))
-
-    async def iniciar():
-        await application.initialize()
-        await application.start()
-        await application.updater.start_polling()
-
     loop = asyncio.get_event_loop()
-    loop.create_task(iniciar())
+    loop.create_task(iniciar_bot())
     loop.create_task(client.start())
     loop.run_until_complete(client.run_until_disconnected())
