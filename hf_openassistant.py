@@ -1,9 +1,8 @@
-
 import aiohttp
 import os
 
 HF_API_KEY = os.getenv("HF_API_KEY")
-HF_MODEL = "OpenAssistant/oasst-sft-1-pythia-12b"
+HF_MODEL = "mistralai/Mistral-7B-Instruct-v0.1"
 
 async def gerar_resposta_ia(prompt_usuario):
     url = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
