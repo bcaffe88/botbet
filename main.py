@@ -110,9 +110,9 @@ async def analisar(texto):
 
         total_perigosos = sum(perigosos)
         desequilibrio = abs(perigosos[0] - perigosos[1]) >= 7
-        if total_perigosos >= 12 and desequilibrio:
+        if total_perigosos >= 10 and desequilibrio:
             criterios.append("Ataques perigosos")
-        resumo.append(f"• Ataques perigosos: {perigosos[0]} x {perigosos[1]} {'✓' if total_perigosos >= 12 and desequilibrio else '✘'}")
+        resumo.append(f"• Ataques perigosos: {perigosos[0]} x {perigosos[1]} {'✓' if total_perigosos >= 10 and desequilibrio else '✘'}")
 
         if sum(no_gol) >= 1:
             criterios.append("Finalizações no gol")
@@ -122,9 +122,9 @@ async def analisar(texto):
             criterios.append("Escanteios")
         resumo.append(f"• Escanteios: {escanteios[0]} x {escanteios[1]} {'✓' if sum(escanteios) >= 2 else '✘'}")
 
-        if vento is not None and vento < 20:
+        if vento is not None and vento < 15:
             criterios.append("Vento ideal")
-        resumo.append(f"• Vento: {vento} m/s {'✓' if vento and vento < 20 else '✘'}")
+        resumo.append(f"• Vento: {vento} m/s {'✓' if vento and vento < 15 else '✘'}")
 
         if sum(chutes) >= 4:
             criterios.append("Chutes totais")
@@ -135,15 +135,16 @@ async def analisar(texto):
         resumo.append(f"• Posse: {posse[0]}% x {posse[1]}% {'✓' if posse_dominante else '✘'}")
 
         # Veredito com base na quantidade de critérios
-        if len(criterios) >= 3:
+        if len(criterios) >= 4:
             veredito = "✅ ENTRAR"
             confianca = "Alta"
             conclusao = "Cenário ideal com múltiplos critérios técnicos atendidos."
             asyncio.create_task(monitorar_odd(jogo, "https://bet365.com"))
-        elif len(criterios) == 2:
+        elif len(criterios) == 3:
             veredito = "⏳ AGUARDAR"
             confianca = "Média"
             conclusao = "Critérios parciais, cenário ainda incompleto."
+            asyncio.create_task(monitorar_odd(jogo, "https://bet365.com"))
         else:
             veredito = "❌ NÃO ENTRAR"
             confianca = "Baixa"
