@@ -1,19 +1,20 @@
-import openai
 import os
+from openai import OpenAI
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Cria o cliente com a chave de API
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def gerar_resposta_ia(msg):
+def gerar_resposta_ia(texto):
     try:
-        resposta = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Você é um analista esportivo técnico com foco em sinais ao vivo."},
-                {"role": "user", "content": msg}
+                {"role": "user", "content": texto}
             ],
             temperature=0.7,
             max_tokens=300
         )
-        return resposta['choices'][0]['message']['content'].strip()
+        return response.choices[0].message.content.strip()
     except Exception as e:
-        return f"❌ Erro na IA: {e}"
+        return f"❌ Erro na IA OpenAI: {e}"
