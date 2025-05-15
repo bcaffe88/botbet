@@ -173,9 +173,9 @@ Confiança: {confianca}
 """
 
     try: explicacao = await gerar_resposta_ia(msg)
-    msg += f"\n\n🧠 Avaliação IA:\n{explicacao}"
-   except Exception as e:
-    msg += f"\n\n🧠 Avaliação IA:\n❌ Erro: {e}"
+        msg += f"\n\n🧠 Avaliação IA:\n{explicacao}"
+    except Exception as e:
+        msg += f"\n\n🧠 Avaliação IA:\n❌ Erro: {e}"
 
         await asyncio.to_thread(bot.send_message, chat_id=CHAT_ID_DESTINO, text=msg)
 
