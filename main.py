@@ -2,7 +2,7 @@
 
 from flask import Flask, request
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Dispatcher, CommandHandler, CallbackContext
+from telegram.ext import Dispatcher, CommandHandler, CallbackContext, ContextTypes
 from telethon.sync import TelegramClient, events
 import os, re, asyncio, aiohttp, time, threading
 from hf_openassistant import gerar_resposta_ia
