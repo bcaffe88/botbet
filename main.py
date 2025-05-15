@@ -100,11 +100,11 @@ async def analisar(texto):
 
         criterios, resumo = [], []
 
-        if ia and ia >= 85:
+        if ia and ia >= 80:
             criterios.append("IA")
         resumo.append(f"• IA: {ia if ia else 'N/A'} {'✓' if ia and ia >= 85 else '✘'}")
 
-        if minuto and 18 <= minuto <= 27:
+        if minuto and 16 <= minuto <= 22:
             criterios.append("Minuto ideal")
         resumo.append(f"• Minuto: {minuto if minuto else 'N/A'} {'✓' if minuto and 18 <= minuto <= 27 else '✘'}")
 
