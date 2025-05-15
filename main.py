@@ -190,10 +190,17 @@ client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 @client.on(events.NewMessage())
 async def tratar(event):
     print(f"📩 Nova mensagem recebida: {event.chat_id}")
+    print(f"🔍 Conteúdo da mensagem:\n{event.message.message}")
+
     if event.chat_id != CHAT_ID_SINAL:
+        print("🚫 Ignorado: chat_id diferente")
         return
-    if 'OVER 0.5 HT' in event.message.message:
+
+    if "over 0.5 ht" in event.message.message.lower():
+        print("✅ Critério encontrado, chamando analisar...")
         await analisar(event.message.message)
+    else:
+        print("⚠️ Mensagem não contém 'over 0.5 ht'")
 
 # RODAR FLASK + TELETHON
 def rodar_flask():
