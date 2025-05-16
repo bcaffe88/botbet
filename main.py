@@ -7,8 +7,8 @@ import logging
 from typing import Optional
 from telethon import TelegramClient, events
 from telethon.sessions import SQLiteSession
-from telegram import Bot, ParseMode
-from telegram.error import TelegramError
+from telegram import Bot
+from telegram.constants import ParseMode
 from ia_openai import gerar_resposta_ia
 
 # Configuração de logging
@@ -46,19 +46,17 @@ class SignalProcessor:
     async def initialize(self):
         """Inicializa conexões"""
         try:
-            # Conecta usando a sessão existente
             await self.client.start()
-            logger.info("✅ Telethon conectado via sessão existente")
+            if not await self.client.is_user_authorized():
+                raise ConnectionError("Falha na autenticação com a sessão existente")
             
-            # Verifica conexão
             me = await self.client.get_me()
-            logger.info(f"👤 Logado como: {me.first_name} (ID: {me.id})")
+            logger.info(f"✅ Telethon conectado como: {me.first_name} (ID: {me.id})")
             
-            # Verifica o bot
             bot_info = await self.bot.get_me()
             logger.info(f"🤖 Bot pronto: @{bot_info.username}")
             
-            logger.info(f"👂 Escutando canal: {CHAT_ID_SINAL}")
+            logger.info(f"👂 Monitorando canal: {CHAT_ID_SINAL}")
             logger.info(f"📤 Enviando para grupo: {CHAT_ID_DESTINO}")
             
             return True
@@ -70,7 +68,6 @@ class SignalProcessor:
     async def forward_signal(self, event):
         """Encaminha mensagem para o grupo destino"""
         try:
-            # Encaminha a mensagem original
             forwarded = await self.client.forward_messages(
                 entity=CHAT_ID_DESTINO,
                 messages=event.message
@@ -78,7 +75,6 @@ class SignalProcessor:
             self.last_message_id = forwarded.id
             logger.info(f"📨 Mensagem {event.id} encaminhada")
             return forwarded
-            
         except Exception as e:
             logger.error(f"❌ Falha ao encaminhar: {str(e)}")
             raise
@@ -86,14 +82,12 @@ class SignalProcessor:
     async def send_analysis(self, event):
         """Envia análise refinada ao grupo"""
         try:
-            # Gera análise técnica
             analysis = await self.generate_analysis(event.raw_text)
             
-            # Formata resposta
             response = (
-                "🔍 **Análise Técnica**\n\n"
+                "🔍 <b>Análise Técnica</b>\n\n"
                 f"{analysis}\n\n"
-                "📋 **Dados Originais**:\n"
+                "📋 <i>Dados Originais</i>:\n"
                 f"{event.raw_text[:300]}..."
             )
             
@@ -101,7 +95,7 @@ class SignalProcessor:
                 chat_id=CHAT_ID_DESTINO,
                 text=response,
                 reply_to_message_id=self.last_message_id,
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode=ParseMode.HTML
             )
             
         except Exception as e:
@@ -123,16 +117,16 @@ class SignalProcessor:
         """Gera análise usando IA"""
         try:
             prompt = (
-                "Analise este sinal de aposta esportiva considerando:\n"
+                "Analise este sinal de aposta esportiva ao vivo considerando:\n"
                 "1. Probabilidade baseada nos dados\n"
-                "2. Momento ideal do jogo\n"
-                "3. Estatísticas apresentadas\n"
-                "4. Fatores externos quando relevantes\n\n"
+                "2. Minuto ideal do jogo (15-25 minutos)\n"
+                "3. Estatísticas de ataques perigosos\n"
+                "4. Fatores climáticos quando relevantes\n\n"
                 f"Dados:\n{text}"
             )
             
             response = await gerar_resposta_ia(prompt)
-            return response if response else "Análise não disponível"
+            return response if response else "🔍 Análise não disponível"
             
         except Exception as e:
             logger.error(f"Erro na IA: {str(e)}")
@@ -142,15 +136,13 @@ class SignalProcessor:
         """Executa o loop principal"""
         try:
             if not await self.initialize():
-                return
+                raise RuntimeError("Inicialização falhou")
 
             @self.client.on(events.NewMessage(chats=CHAT_ID_SINAL))
             async def handler(event):
-                """Processa mensagens do canal"""
                 try:
                     logger.info(f"📥 Nova mensagem (ID: {event.id})")
                     
-                    # Verifica se é um sinal válido
                     if "OVER 0.5 HT" in event.raw_text:
                         logger.info("🎯 Sinal detectado - Processando...")
                         try:
