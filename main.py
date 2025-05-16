@@ -3,7 +3,6 @@ import os
 import re
 import aiohttp
 import asyncio
-import time
 import logging
 from typing import Optional, Dict, Any
 from telethon import TelegramClient, events, types
@@ -47,7 +46,6 @@ class ProcessadorSinais:
     async def encaminhar_mensagem(self, event):
         """Encaminha a mensagem original para o grupo destino"""
         try:
-            # Encaminha a mensagem original
             forwarded = await client.forward_messages(
                 entity=CHAT_ID_DESTINO,
                 messages=event.message
@@ -62,14 +60,11 @@ class ProcessadorSinais:
     async def enviar_analise(self, event, mensagem_original):
         """Envia a análise refinada como resposta à mensagem encaminhada"""
         try:
-            # Extrai dados da mensagem original
             texto = event.raw_text
             jogo = self.extrair_jogo(texto)
             
-            # Gera análise
             analise = await self.gerar_analise_tecnica(texto)
             
-            # Monta mensagem formatada
             resposta = (
                 f"⚡️ **Análise Técnica** ⚡️\n\n"
                 f"📌 **Jogo**: {jogo}\n"
@@ -78,7 +73,6 @@ class ProcessadorSinais:
                 f"{texto[:300]}..."
             )
             
-            # Envia como resposta à mensagem encaminhada
             await bot.send_message(
                 chat_id=CHAT_ID_DESTINO,
                 text=resposta,
@@ -134,19 +128,13 @@ async def handler_mensagens(event):
     try:
         logger.info(f"📥 Nova mensagem recebida (ID: {event.id})")
         
-        # Verifica se é um sinal válido
         if not any(keyword in event.raw_text for keyword in ["OVER 0.5 HT", "⚽️", "⏰"]):
             logger.debug("Mensagem não contém palavras-chave - ignorando")
             return
             
-        # Processamento principal
         try:
-            # 1. Encaminha a mensagem original
             forwarded = await processador.encaminhar_mensagem(event)
-            
-            # 2. Envia análise refinada
             await processador.enviar_analise(event, forwarded)
-            
             logger.info("✅ Processamento concluído com sucesso")
             
         except Exception as e:
@@ -157,19 +145,32 @@ async def handler_mensagens(event):
         logger.critical(f"💥 Erro crítico no handler: {str(e)}", exc_info=True)
 
 async def verificar_permissoes():
-    """Verifica se o bot tem permissões necessárias"""
+    """Verifica se o bot tem permissões necessárias - CORRIGIDO"""
     try:
-        # Verifica permissões no grupo destino
+        # Corrigido: await adicionado corretamente
+        me = await bot.get_me()
         chat = await bot.get_chat(CHAT_ID_DESTINO)
-        permissões = chat.get_member(bot.get_me().id)
+        member = await chat.get_member(me.id)
         
-        logger.info(f"Permissões no grupo destino: {permissões.status}")
-        logger.debug(f"Detalhes: {permissões}")
+        logger.info(f"Permissões no grupo destino: {member.status}")
+        logger.debug(f"Detalhes: {member}")
         
-        if permissões.status != "administrator":
+        if member.status != "administrator":
             logger.warning("⚠️ O bot não é administrador no grupo destino!")
             return False
             
+        # Verifica permissões específicas
+        required_permissions = [
+            'can_post_messages',
+            'can_edit_messages',
+            'can_delete_messages'
+        ]
+        
+        for perm in required_permissions:
+            if not getattr(member, perm, False):
+                logger.warning(f"⚠️ Falta permissão: {perm}")
+                return False
+                
         return True
         
     except Exception as e:
@@ -177,12 +178,14 @@ async def verificar_permissoes():
         return False
 
 async def iniciar():
-    """Inicia todos os serviços"""
+    """Inicia todos os serviços - VERSÃO CORRIGIDA"""
     try:
         await client.start()
         logger.info("✅ Telethon conectado")
         
+        # Verificação corrigida com await
         if not await verificar_permissoes():
+            logger.error("❌ Verificação de permissões falhou")
             raise RuntimeError("Permissões insuficientes no grupo destino")
         
         me = await client.get_me()
@@ -197,7 +200,7 @@ async def iniciar():
         await client.run_until_disconnected()
         
     except Exception as e:
-        logger.critical(f"⛔ Falha na inicialização: {str(e)}")
+        logger.critical(f"⛔ Falha na inicialização: {str(e)}", exc_info=True)
         raise
     finally:
         await client.disconnect()
