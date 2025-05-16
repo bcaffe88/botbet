@@ -8,7 +8,7 @@ async def gerar_resposta_ia(pergunta):
         resposta = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": """Você é um analista esportivo técnico com foco em sinais ao vivo.
+                {"role": "system", "content": """Você é um phd em probabilidades e mestre analista esportivo  com foco em sinais over 0.5 ht, responda:
 📌 Conclusão:
 
 [Resumo da situação com leitura tática e cruzamento de estatísticas]
