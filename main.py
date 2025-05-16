@@ -8,247 +8,204 @@ import logging
 from typing import Optional, Dict, Any
 from telethon import TelegramClient, events, types
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import TelegramError
 from ia_openai import gerar_resposta_ia
 
-# Configuração avançada de logging
+# Configuração de logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('bot_analisador.log'),
+        logging.FileHandler('sinais_bot.log'),
         logging.StreamHandler()
     ]
 )
 logger = logging.getLogger(__name__)
 
-# Variáveis de ambiente com validação
-def get_env_var(name: str, required: bool = True) -> str:
-    value = os.getenv(name)
-    if required and not value:
-        logger.error(f"Variável de ambiente {name} não configurada!")
-        raise ValueError(f"Variável {name} é obrigatória")
-    return value
-
-API_ID = get_env_var("API_ID")
-API_HASH = get_env_var("API_HASH")
-CHAT_ID_SINAL = get_env_var("CHAT_ID_SINAL")
-CHAT_ID_DESTINO = get_env_var("CHAT_ID_DESTINO")
-ODDS_API_KEY = get_env_var("ODDS_API_KEY", required=False)
-BOT_TOKEN = get_env_var("BOT_TOKEN")
+# Variáveis de ambiente
+API_ID = int(os.getenv("API_ID"))
+API_HASH = os.getenv("API_HASH")
+CHAT_ID_SINAL = int(os.getenv("CHAT_ID_SINAL"))  # Grupo de origem
+CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"))  # Grupo de destino
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # Inicialização dos clients
 bot = Bot(token=BOT_TOKEN)
 client = TelegramClient(
-    "sessao_sinais", 
-    API_ID, 
+    "sessao_sinais",
+    API_ID,
     API_HASH,
-    system_version="4.16.30-vxCustom"
+    system_version="4.16.30-vxCustom",
+    connection_retries=5
 )
 
-class AnalisadorSinais:
+class ProcessadorSinais:
     def __init__(self):
-        self.sessoes_ativas = {}
         self.ultima_mensagem = None
+        self.contador = 0
 
-    async def monitorar_odd(self, jogo: str, link: str, timeout: int = 300) -> None:
-        """Monitora odds com reconexão automática e cache local"""
-        url = "https://api.the-odds-api.com/v4/sports/soccer/odds/"
-        params = {
-            "regions": "eu",
-            "markets": "totals",
-            "apiKey": ODDS_API_KEY
-        }
-        
-        inicio = time.time()
-        tentativa = 0
-        
-        while time.time() - inicio < timeout:
-            tentativa += 1
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(url, params=params) as resp:
-                        if resp.status != 200:
-                            logger.warning(f"API Odds retornou status {resp.status}. Tentativa {tentativa}")
-                            await asyncio.sleep(15)
-                            continue
-                            
-                        data = await resp.json()
-                        logger.debug(f"Dados recebidos da API: {data[:1]}...")  # Log parcial
-                        
-                        for partida in data:
-                            nome = self._formatar_nome_jogo(partida)
-                            if jogo.lower() in nome.lower():
-                                await self._processar_odds(partida, nome, link)
-                                return
-                                
-            except Exception as e:
-                logger.error(f"Erro na tentativa {tentativa}: {str(e)}", exc_info=True)
-                await asyncio.sleep(30)
-                
-        logger.info(f"Monitoramento encerrado para {jogo} após {timeout}s")
+    async def encaminhar_mensagem(self, event):
+        """Encaminha a mensagem original para o grupo destino"""
+        try:
+            # Encaminha a mensagem original
+            forwarded = await client.forward_messages(
+                entity=CHAT_ID_DESTINO,
+                messages=event.message
+            )
+            self.ultima_mensagem = forwarded.id
+            logger.info(f"✅ Mensagem {event.id} encaminhada como ID {forwarded.id}")
+            return forwarded
+        except Exception as e:
+            logger.error(f"❌ Falha ao encaminhar: {str(e)}")
+            raise
 
-    def _formatar_nome_jogo(self, partida: Dict) -> str:
-        """Padroniza o formato do nome do jogo"""
-        return f"{partida.get('home_team', 'Time1')} x {partida.get('away_team', 'Time2')}"
+    async def enviar_analise(self, event, mensagem_original):
+        """Envia a análise refinada como resposta à mensagem encaminhada"""
+        try:
+            # Extrai dados da mensagem original
+            texto = event.raw_text
+            jogo = self.extrair_jogo(texto)
+            
+            # Gera análise
+            analise = await self.gerar_analise_tecnica(texto)
+            
+            # Monta mensagem formatada
+            resposta = (
+                f"⚡️ **Análise Técnica** ⚡️\n\n"
+                f"📌 **Jogo**: {jogo}\n"
+                f"🔍 **Detalhes**:\n{analise}\n\n"
+                f"📊 **Sinal Original**:\n"
+                f"{texto[:300]}..."
+            )
+            
+            # Envia como resposta à mensagem encaminhada
+            await bot.send_message(
+                chat_id=CHAT_ID_DESTINO,
+                text=resposta,
+                reply_to_message_id=self.ultima_mensagem,
+                parse_mode="Markdown"
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao enviar análise: {str(e)}")
+            await self.enviar_fallback(event)
 
-    async def _processar_odds(self, partida: Dict, nome: str, link: str) -> None:
-        """Processa as odds encontradas e envia mensagem"""
-        for bk in partida.get("bookmakers", []):
-            for mkt in bk.get("markets", []):
-                if mkt["key"] == "totals":
-                    for linha in mkt["outcomes"]:
-                        if linha["point"] == 0.5 and linha["name"] == "Over":
-                            odd = linha["price"]
-                            if odd >= 1.50:
-                                msg = (
-                                    f"⚽️ ENTRADA VALIDADA\n\n📌 Jogo: {nome}\n"
-                                    f"📈 Odd +0.5 HT: {odd}\n💰 Valor sugerido: R$15"
-                                )
-                                await self._enviar_mensagem_validada(msg, link)
-                                return
-
-    async def _enviar_mensagem_validada(self, mensagem: str, link: str) -> None:
-        """Envia mensagem formatada com tratamento de erro"""
+    async def enviar_fallback(self, event):
+        """Mensagem de fallback caso ocorra erro na análise"""
         try:
             await bot.send_message(
                 chat_id=CHAT_ID_DESTINO,
-                text=mensagem,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("👉 Apostar agora", url=link)]
-                ]),
-                parse_mode="Markdown"
+                text=f"⚠️ Análise automática indisponível. Mensagem original: {event.raw_text[:200]}...",
+                reply_to_message_id=self.ultima_mensagem
             )
-            logger.info("Mensagem de validação enviada com sucesso")
         except Exception as e:
-            logger.error(f"Falha ao enviar mensagem: {str(e)}", exc_info=True)
+            logger.critical(f"⛔ Falha crítica no fallback: {str(e)}")
 
-    async def analisar_mensagem(self, texto: str) -> Optional[str]:
-        """Analisa a mensagem com extração robusta de dados"""
+    async def gerar_analise_tecnica(self, texto: str) -> str:
+        """Gera a análise técnica usando IA"""
         try:
-            logger.info("Iniciando análise de mensagem")
-            
-            dados = {
-                'jogo': self._extrair_jogo(texto),
-                'minuto': self._extrair_minuto(texto),
-                'ia': self._extrair_ia(texto),
-                'perigosos': self._extrair_dados(texto, "Ataques Perigosos"),
-                'posse': self._extrair_dados(texto, "Posse de Bola"),
-                'escanteios': self._extrair_dados(texto, "Escanteios"),
-                'no_gol': self._extrair_dados(texto, "No Gol"),
-                'vento': self._extrair_vento(texto)
-            }
-            
-            criterios, resumo = self._avaliar_criterios(dados)
-            veredito, confianca, conclusao = self._determinar_veredito(criterios)
-            
-            if len(criterios) >= 4:
-                asyncio.create_task(
-                    self.monitorar_odd(
-                        dados['jogo'], 
-                        "https://bet365.com"
-                    )
-                )
-            
-            msg = self._formatar_resposta(
-                veredito, 
-                dados['jogo'],
-                resumo,
-                conclusao,
-                confianca
+            prompt = (
+                "Analise este sinal de aposta considerando:\n"
+                "1. Probabilidade baseada nos dados\n"
+                "2. Momento ideal do jogo\n"
+                "3. Estatísticas apresentadas\n"
+                "4. Fatores externos como clima\n\n"
+                f"Dados:\n{texto}"
             )
             
-            # Integração com IA
-            try:
-                explicacao = await gerar_resposta_ia(msg)
-                msg += f"\n\n🧠 Análise Técnica Premium:\n{explicacao}"
-            except Exception as e:
-                logger.error(f"Erro na IA: {str(e)}")
-                msg += "\n\n⚠️ Análise técnica indisponível no momento"
-            
-            await self._enviar_mensagem_validada(msg, "")
-            return msg
+            resposta = await gerar_resposta_ia(prompt)
+            return resposta if resposta else "Análise não disponível no momento"
             
         except Exception as e:
-            logger.error(f"Erro crítico na análise: {str(e)}", exc_info=True)
-            return None
+            logger.error(f"Erro na análise IA: {str(e)}")
+            return "⚠️ Sistema de análise temporariamente indisponível"
 
-    # Métodos auxiliares (continuam conforme sua implementação original)
-    # ... (incluir todos os métodos _extrair_* e _avaliar_* aqui)
+    def extrair_jogo(self, texto: str) -> str:
+        """Extrai o nome do jogo da mensagem"""
+        padrao = r"(?:⚽️|🏆|📌)\s*([^\n]+)"
+        match = re.search(padrao, texto)
+        return match.group(1).strip() if match else "Jogo não identificado"
 
-analisador = AnalisadorSinais()
+processador = ProcessadorSinais()
 
-@client.on(events.NewMessage(chats=int(CHAT_ID_SINAL)))
-async def handler_mensagens(event: types.Message):
-    """Handler principal para processar mensagens"""
+@client.on(events.NewMessage(chats=CHAT_ID_SINAL))
+async def handler_mensagens(event):
+    """Processa mensagens do grupo de origem"""
     try:
-        logger.info(f"Nova mensagem recebida no chat {event.chat_id}")
+        logger.info(f"📥 Nova mensagem recebida (ID: {event.id})")
         
-        if not event.text:
-            logger.warning("Mensagem sem texto ignorada")
+        # Verifica se é um sinal válido
+        if not any(keyword in event.raw_text for keyword in ["OVER 0.5 HT", "⚽️", "⏰"]):
+            logger.debug("Mensagem não contém palavras-chave - ignorando")
             return
             
-        if "OVER 0.5 HT" in event.text:
-            logger.info("Palavra-chave detectada - iniciando análise")
-            await analisador.analisar_mensagem(event.text)
-        else:
-            logger.debug("Mensagem não contém trigger")
+        # Processamento principal
+        try:
+            # 1. Encaminha a mensagem original
+            forwarded = await processador.encaminhar_mensagem(event)
+            
+            # 2. Envia análise refinada
+            await processador.enviar_analise(event, forwarded)
+            
+            logger.info("✅ Processamento concluído com sucesso")
+            
+        except Exception as e:
+            logger.error(f"❌ Erro no processamento: {str(e)}")
+            await processador.enviar_fallback(event)
             
     except Exception as e:
-        logger.error(f"Erro no handler: {str(e)}", exc_info=True)
+        logger.critical(f"💥 Erro crítico no handler: {str(e)}", exc_info=True)
 
-async def verificar_conexao():
-    """Testa todas as conexões necessárias"""
-    logger.info("Iniciando testes de conexão...")
-    
-    # Teste Telegram Client
+async def verificar_permissoes():
+    """Verifica se o bot tem permissões necessárias"""
     try:
-        me = await client.get_me()
-        logger.info(f"Conectado ao Telegram como: {me.username} (ID: {me.id})")
-    except Exception as e:
-        logger.critical(f"Falha na conexão Telegram: {str(e)}")
-        raise
+        # Verifica permissões no grupo destino
+        chat = await bot.get_chat(CHAT_ID_DESTINO)
+        permissões = chat.get_member(bot.get_me().id)
         
-    # Teste Bot Telegram
-    try:
-        info = await bot.get_me()
-        logger.info(f"Bot Telegram ativo: @{info.username}")
-    except Exception as e:
-        logger.critical(f"Falha na conexão do Bot: {str(e)}")
-        raise
+        logger.info(f"Permissões no grupo destino: {permissões.status}")
+        logger.debug(f"Detalhes: {permissões}")
         
-    # Verifica acesso ao chat de sinais
-    try:
-        chat = await client.get_entity(int(CHAT_ID_SINAL))
-        logger.info(f"Acesso confirmado ao chat: {chat.title}")
+        if permissões.status != "administrator":
+            logger.warning("⚠️ O bot não é administrador no grupo destino!")
+            return False
+            
+        return True
+        
     except Exception as e:
-        logger.critical(f"Falha ao acessar chat {CHAT_ID_SINAL}: {str(e)}")
-        raise
+        logger.error(f"Erro ao verificar permissões: {str(e)}")
+        return False
 
 async def iniciar():
     """Inicia todos os serviços"""
     try:
-        logger.info("Iniciando serviços...")
-        
         await client.start()
-        await verificar_conexao()
+        logger.info("✅ Telethon conectado")
         
-        logger.info("Bot pronto e escutando")
-        logger.info(f"Monitorando chat ID: {CHAT_ID_SINAL}")
-        logger.info(f"Enviando para chat ID: {CHAT_ID_DESTINO}")
+        if not await verificar_permissoes():
+            raise RuntimeError("Permissões insuficientes no grupo destino")
+        
+        me = await client.get_me()
+        logger.info(f"👤 Sessão iniciada como: {me.first_name} (ID: {me.id})")
+        
+        bot_info = await bot.get_me()
+        logger.info(f"🤖 Bot Telegram pronto: @{bot_info.username}")
+        
+        logger.info(f"👂 Escutando mensagens no chat: {CHAT_ID_SINAL}")
+        logger.info(f"📤 Enviando para o chat: {CHAT_ID_DESTINO}")
         
         await client.run_until_disconnected()
         
     except Exception as e:
-        logger.critical(f"Erro fatal: {str(e)}", exc_info=True)
+        logger.critical(f"⛔ Falha na inicialização: {str(e)}")
         raise
     finally:
-        logger.info("Encerrando serviços...")
         await client.disconnect()
 
 if __name__ == "__main__":
     try:
         asyncio.run(iniciar())
     except KeyboardInterrupt:
-        logger.info("Bot encerrado pelo usuário")
+        logger.info("⏹ Bot encerrado pelo usuário")
     except Exception as e:
-        logger.critical(f"Erro não tratado: {str(e)}", exc_info=True)
+        logger.critical(f"💣 Erro não tratado: {str(e)}", exc_info=True)
