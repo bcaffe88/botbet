@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
 import os
-import re
-import aiohttp
 import asyncio
 import logging
-from typing import Optional
 from telethon import TelegramClient, events
 from telethon.sessions import SQLiteSession
 from telegram import Bot
 from telegram.constants import ParseMode
 from ia_openai import gerar_resposta_ia
 
-# Configuração de logging
+# Configuração
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -23,153 +20,121 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Variáveis de ambiente
-API_ID = int(os.getenv("API_ID", 0))
-API_HASH = os.getenv("API_HASH", "")
-CHAT_ID_SINAL = int(os.getenv("CHAT_ID_SINAL", 0))
-CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO", 0))
-BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+API_ID = int(os.getenv("API_ID"))
+API_HASH = os.getenv("API_HASH")
+CHAT_ID_SINAL = int(os.getenv("CHAT_ID_SINAL"))  # Canal de origem
+CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"))  # Grupo de destino
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+ARQUIVO_SESSAO = "sessao_sinais.session"
 
-# Configuração de sessão
-SESSION_FILE = "sessao_sinais.session"
-
-class SignalProcessor:
+class BotDeSinais:
     def __init__(self):
         self.bot = Bot(token=BOT_TOKEN)
-        self.client = TelegramClient(
-            session=SQLiteSession(SESSION_FILE),
-            api_id=API_ID,
-            api_hash=API_HASH,
-            connection_retries=5
+        self.cliente = TelegramClient(
+            SQLiteSession(ARQUIVO_SESSAO),
+            API_ID,
+            API_HASH
         )
-        self.last_message_id = None
+        self.rodando = True
 
-    async def initialize(self):
-        """Inicializa conexões"""
+    async def iniciar_servicos(self):
+        """Inicializa todos os serviços"""
         try:
-            await self.client.start()
-            if not await self.client.is_user_authorized():
-                raise ConnectionError("Falha na autenticação com a sessão existente")
-            
-            me = await self.client.get_me()
-            logger.info(f"✅ Telethon conectado como: {me.first_name} (ID: {me.id})")
-            
-            bot_info = await self.bot.get_me()
-            logger.info(f"🤖 Bot pronto: @{bot_info.username}")
-            
+            # Conecta o Telethon (sua conta pessoal)
+            await self.cliente.start()
+            if not await self.cliente.is_user_authorized():
+                raise RuntimeError("Autenticação do Telethon falhou")
+
+            usuario = await self.cliente.get_me()
+            logger.info(f"✅ Telethon conectado como: {usuario.first_name}")
+
+            # Verifica o bot
+            info_bot = await self.bot.get_me()
+            logger.info(f"🤖 Bot pronto: @{info_bot.username}")
+
+            # Configura o handler de mensagens
+            self.cliente.add_event_handler(
+                self.processar_mensagem,
+                events.NewMessage(chats=CHAT_ID_SINAL)
+            )
+
             logger.info(f"👂 Monitorando canal: {CHAT_ID_SINAL}")
             logger.info(f"📤 Enviando para grupo: {CHAT_ID_DESTINO}")
-            
-            return True
-            
+
+            # Mantém o bot em execução
+            while self.rodando:
+                await asyncio.sleep(1)
+
         except Exception as e:
             logger.critical(f"⛔ Falha na inicialização: {str(e)}")
-            return False
-
-    async def forward_signal(self, event):
-        """Encaminha mensagem para o grupo destino"""
-        try:
-            forwarded = await self.client.forward_messages(
-                entity=CHAT_ID_DESTINO,
-                messages=event.message
-            )
-            self.last_message_id = forwarded.id
-            logger.info(f"📨 Mensagem {event.id} encaminhada")
-            return forwarded
-        except Exception as e:
-            logger.error(f"❌ Falha ao encaminhar: {str(e)}")
             raise
+        finally:
+            await self.parar_servicos()
 
-    async def send_analysis(self, event):
-        """Envia análise refinada ao grupo"""
+    async def parar_servicos(self):
+        """Desligamento adequado"""
+        self.rodando = False
+        if self.cliente.is_connected():
+            await self.cliente.disconnect()
+        logger.info("🛑 Serviços encerrados")
+
+    async def processar_mensagem(self, evento):
+        """Processa mensagens recebidas"""
         try:
-            analysis = await self.generate_analysis(event.raw_text)
-            
-            response = (
-                "🔍 <b>Análise Técnica</b>\n\n"
-                f"{analysis}\n\n"
-                "📋 <i>Dados Originais</i>:\n"
-                f"{event.raw_text[:300]}..."
-            )
-            
+            logger.info(f"📩 Nova mensagem (ID: {evento.id})")
+
+            # Palavras-chave para identificar sinais
+            palavras_chave = [
+                "OVER 0.5 HT", "⚽️", "⏰", "ENTRADA",
+                "GOL", "HT", "OVER", "SINAL", "APOSTA"
+            ]
+
+            if any(palavra in evento.raw_text for palavra in palavras_chave):
+                logger.info("🎯 Sinal detectado - Processando...")
+                
+                # Encaminha a mensagem original
+                mensagem_encaminhada = await self.cliente.forward_messages(
+                    CHAT_ID_DESTINO,
+                    evento.message
+                )
+                
+                # Envia análise
+                await self.enviar_analise_tecnica(
+                    evento.raw_text,
+                    mensagem_encaminhada.id
+                )
+
+        except Exception as e:
+            logger.error(f"❌ Falha no processamento: {str(e)}")
+
+    async def enviar_analise_tecnica(self, texto, id_resposta):
+        """Gera e envia análise técnica"""
+        try:
+            analise = await gerar_resposta_ia(
+                f"Analise este sinal de aposta:\n\n{texto[:1000]}"
+            ) or "Análise indisponível"
+
             await self.bot.send_message(
                 chat_id=CHAT_ID_DESTINO,
-                text=response,
-                reply_to_message_id=self.last_message_id,
+                text=f"🔍 <b>Análise Técnica</b>\n\n{analise}",
+                reply_to_message_id=id_resposta,
                 parse_mode=ParseMode.HTML
             )
-            
         except Exception as e:
             logger.error(f"❌ Falha na análise: {str(e)}")
-            await self.send_fallback(event)
-
-    async def send_fallback(self, event):
-        """Mensagem simplificada caso a análise falhe"""
-        try:
+            # Mensagem de fallback
             await self.bot.send_message(
                 chat_id=CHAT_ID_DESTINO,
-                text=f"📩 Mensagem recebida:\n\n{event.raw_text[:300]}...",
-                reply_to_message_id=self.last_message_id
+                text=f"📩 Mensagem original:\n\n{texto[:300]}...",
+                reply_to_message_id=id_resposta
             )
-        except Exception as e:
-            logger.critical(f"⛔ Fallback falhou: {str(e)}")
-
-    async def generate_analysis(self, text: str) -> str:
-        """Gera análise usando IA"""
-        try:
-            prompt = (
-                "Analise este sinal de aposta esportiva ao vivo considerando:\n"
-                "1. Probabilidade baseada nos dados\n"
-                "2. Minuto ideal do jogo (15-25 minutos)\n"
-                "3. Estatísticas de ataques perigosos\n"
-                "4. Fatores climáticos quando relevantes\n\n"
-                f"Dados:\n{text}"
-            )
-            
-            response = await gerar_resposta_ia(prompt)
-            return response if response else "🔍 Análise não disponível"
-            
-        except Exception as e:
-            logger.error(f"Erro na IA: {str(e)}")
-            return "⚠️ Análise temporariamente indisponível"
-
-    async def run(self):
-        """Executa o loop principal"""
-        try:
-            if not await self.initialize():
-                raise RuntimeError("Inicialização falhou")
-
-            @self.client.on(events.NewMessage(chats=CHAT_ID_SINAL))
-            async def handler(event):
-                try:
-                    logger.info(f"📥 Nova mensagem (ID: {event.id})")
-                    
-                    if "OVER 0.5 HT" in event.raw_text:
-                        logger.info("🎯 Sinal detectado - Processando...")
-                        try:
-                            await self.forward_signal(event)
-                            await self.send_analysis(event)
-                        except Exception as e:
-                            logger.error(f"❌ Pipeline falhou: {str(e)}")
-                            await self.send_fallback(event)
-                    else:
-                        logger.debug("Mensagem sem trigger - Ignorando")
-                        
-                except Exception as e:
-                    logger.error(f"💥 Erro no handler: {str(e)}")
-
-            await self.client.run_until_disconnected()
-            
-        except Exception as e:
-            logger.critical(f"💣 Erro não tratado: {str(e)}")
-        finally:
-            await self.client.disconnect()
 
 if __name__ == "__main__":
-    processor = SignalProcessor()
+    bot = BotDeSinais()
     
     try:
-        asyncio.run(processor.run())
+        asyncio.run(bot.iniciar_servicos())
     except KeyboardInterrupt:
-        logger.info("⏹ Bot encerrado pelo usuário")
+        logger.info("⏹ Encerrado pelo usuário")
     except Exception as e:
         logger.critical(f"💥 Falha crítica: {str(e)}")
