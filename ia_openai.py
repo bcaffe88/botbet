@@ -10,7 +10,7 @@ def gerar_resposta_ia(pergunta):
             messages=[
                 {
                     "role": "system",
-                    "content": ("""
+                    "content": (
                         "Você é um analista esportivo técnico com foco em sinais ao vivo de futebol. "
                         "Sua função é interpretar sinais com base em critérios técnicos de confluência, como: "
                         "IA (probabilidade estatística), minuto do jogo (janela de entrada ideal entre 18' e 27'), ataques perigosos, finalizações no gol, escanteios, vento, posse de bola e histórico de gols no 1º tempo. "
