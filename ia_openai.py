@@ -28,8 +28,9 @@ async def gerar_resposta_ia(pergunta):
 👤 *"Botafogo x Fluminense - minuto 20, 1 escanteio, vento 15 m/s."*  
 🤖 *"❌ Aguardar: Faltam 1 escanteio e 1 chute no gol (IA 82%). Vento OK. Histórico: 2/5 jogos com 2+ gols 1T (risco moderado)."""},
                 {"role": "user", "content": pergunta}
-                max_tokens=150
-            ]
+                ],
+    temperature=0.7,
+    max_tokens=300
         )
         return resposta.choices[0].message.content.strip()
     except Exception as e:
