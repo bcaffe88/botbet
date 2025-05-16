@@ -2,13 +2,14 @@
 import os
 import asyncio
 import logging
+import signal
 from telethon import TelegramClient, events
 from telethon.sessions import SQLiteSession
 from telegram import Bot
 from telegram.constants import ParseMode
 from ia_openai import gerar_resposta_ia
 
-# Configuração de logging
+# Configuração
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -22,39 +23,46 @@ logger = logging.getLogger(__name__)
 # Variáveis de ambiente
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
-CHAT_ID_SINAL = int(os.getenv("CHAT_ID_SINAL"))  # Canal de origem
-CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"))  # Grupo de destino
+CHAT_ID_SINAL = int(os.getenv("CHAT_ID_SINAL"))
+CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"))
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ARQUIVO_SESSAO = "sessao_sinais.session"
+SESSION_FILE = "sessao_sinais.session"
 
 class BotSinais:
     def __init__(self):
         self.bot = Bot(token=BOT_TOKEN)
-        self.cliente = TelegramClient(
-            SQLiteSession(ARQUIVO_SESSAO),
+        self.client = TelegramClient(
+            SQLiteSession(SESSION_FILE),
             API_ID,
             API_HASH
         )
-        self.manter_rodando = True
+        self.loop = asyncio.get_event_loop()
+        self.should_run = True
 
-    async def iniciar(self):
-        """Inicia todos os serviços"""
+        # Configura handlers de sinal
+        signal.signal(signal.SIGINT, self.handle_signal)
+        signal.signal(signal.SIGTERM, self.handle_signal)
+
+    def handle_signal(self, signum, frame):
+        """Manipula sinais de desligamento"""
+        logger.info(f"Recebido sinal {signum}, encerrando...")
+        self.should_run = False
+
+    async def start(self):
+        """Inicia o bot"""
         try:
-            # Conecta o Telethon
-            await self.cliente.start()
-            if not await self.cliente.is_user_authorized():
-                raise RuntimeError("Falha na autenticação com a sessão")
+            await self.client.start()
+            if not await self.client.is_user_authorized():
+                raise RuntimeError("Autenticação falhou")
 
-            usuario = await self.cliente.get_me()
-            logger.info(f"✅ Conectado como: {usuario.first_name}")
+            me = await self.client.get_me()
+            logger.info(f"✅ Conectado como: {me.first_name}")
 
-            # Verifica o bot
-            info_bot = await self.bot.get_me()
-            logger.info(f"🤖 Bot pronto: @{info_bot.username}")
+            bot_info = await self.bot.get_me()
+            logger.info(f"🤖 Bot pronto: @{bot_info.username}")
 
-            # Configura handler de mensagens
-            self.cliente.add_event_handler(
-                self.processar_mensagem,
+            self.client.add_event_handler(
+                self.handle_message,
                 events.NewMessage(chats=CHAT_ID_SINAL)
             )
 
@@ -62,103 +70,62 @@ class BotSinais:
             logger.info(f"📤 Enviando para grupo: {CHAT_ID_DESTINO}")
 
             # Mantém o bot ativo
-            while self.manter_rodando:
-                await asyncio.sleep(10)  # Verifica a cada 10 segundos
+            while self.should_run:
+                await asyncio.sleep(1)
 
         except Exception as e:
-            logger.critical(f"⛔ Erro crítico: {str(e)}")
+            logger.critical(f"⛔ Erro: {str(e)}")
             raise
         finally:
-            await self.encerrar()
+            await self.stop()
 
-    async def encerrar(self):
-        """Encerra os serviços corretamente"""
-        self.manter_rodando = False
-        if self.cliente.is_connected():
-            await self.cliente.disconnect()
+    async def stop(self):
+        """Encerra conexões"""
+        if self.client.is_connected():
+            await self.client.disconnect()
         logger.info("🛑 Bot encerrado")
 
-    async def processar_mensagem(self, evento):
-        """Processa mensagens do canal"""
+    async def handle_message(self, event):
+        """Processa mensagens recebidas"""
         try:
-            logger.info(f"📩 Mensagem recebida (ID: {evento.id})")
+            logger.info(f"📩 Nova mensagem (ID: {event.id})")
 
-            # Verifica se é um sinal válido
-            palavras_trigger = [
-                "OVER 0.5 HT", "⚽️", "⏰", "ENTRADA",
-                "GOL", "HT", "OVER", "SINAL", "APOSTA"
-            ]
-
-            if any(trigger in evento.raw_text for trigger in palavras_trigger):
-                logger.info("🎯 Sinal detectado - Processando...")
-                
-                try:
-                    # 1. Encaminha mensagem original
-                    mensagem_encaminhada = await self.cliente.forward_messages(
-                        entity=CHAT_ID_DESTINO,
-                        messages=evento.message
-                    )
-
-                    # 2. Envia análise técnica
-                    await self.enviar_analise(
-                        texto=evento.raw_text,
-                        id_mensagem=mensagem_encaminhada.id
-                    )
-
-                except Exception as e:
-                    logger.error(f"❌ Erro no processamento: {str(e)}")
-                    await self.enviar_fallback(evento)
+            triggers = ["OVER 0.5 HT", "⚽️", "⏰", "ENTRADA", "GOL", "HT", "OVER"]
+            if any(t in event.raw_text for t in triggers):
+                logger.info("🎯 Sinal detectado")
+                forwarded = await self.client.forward_messages(
+                    CHAT_ID_DESTINO,
+                    event.message
+                )
+                await self.send_analysis(event.raw_text, forwarded.id)
 
         except Exception as e:
-            logger.error(f"💥 Erro no handler: {str(e)}")
+            logger.error(f"❌ Erro: {str(e)}")
 
-    async def enviar_analise(self, texto, id_mensagem):
-        """Envia análise técnica ao grupo"""
+    async def send_analysis(self, text, reply_to_id):
+        """Envia análise técnica"""
         try:
-            analise = await gerar_resposta_ia(
-                f"Analise este sinal de aposta considerando:\n"
-                f"1. Probabilidade baseada nos dados\n"
-                f"2. Momento ideal do jogo\n"
-                f"3. Estatísticas apresentadas\n\n"
-                f"Dados:\n{texto[:1000]}"
-            ) or "Análise não disponível no momento"
-
+            analysis = await gerar_resposta_ia(f"Analise este sinal:\n\n{text[:1000]}")
             await self.bot.send_message(
                 chat_id=CHAT_ID_DESTINO,
-                text=f"🔍 <b>Análise Técnica</b>\n\n{analise}",
-                reply_to_message_id=id_mensagem,
+                text=f"🔍 <b>Análise Técnica</b>\n\n{analysis or 'Sem análise disponível'}",
+                reply_to_message_id=reply_to_id,
                 parse_mode=ParseMode.HTML
             )
-
         except Exception as e:
             logger.error(f"❌ Falha na análise: {str(e)}")
-            await self.enviar_fallback_simples(texto, id_mensagem)
-
-    async def enviar_fallback(self, evento):
-        """Mensagem de fallback para erros no processamento"""
-        try:
             await self.bot.send_message(
                 chat_id=CHAT_ID_DESTINO,
-                text=f"⚠️ Mensagem recebida (análise falhou):\n\n{evento.raw_text[:300]}...",
-                reply_to_message_id=self.ultima_mensagem
+                text=f"📩 Mensagem original:\n\n{text[:300]}...",
+                reply_to_message_id=reply_to_id
             )
-        except Exception as e:
-            logger.critical(f"⛔ Fallback falhou: {str(e)}")
 
-    async def enviar_fallback_simples(self, texto, id_mensagem):
-        """Fallback simplificado"""
-        await self.bot.send_message(
-            chat_id=CHAT_ID_DESTINO,
-            text=f"📩 Mensagem original:\n\n{texto[:300]}...",
-            reply_to_message_id=id_mensagem
-        )
+async def main():
+    bot = BotSinais()
+    await bot.start()
 
 if __name__ == "__main__":
-    bot = BotSinais()
-    
     try:
-        asyncio.run(bot.iniciar())
+        asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("⏹ Encerrado pelo usuário")
-    except Exception as e:
-        logger.critical(f"💥 Falha crítica: {str(e)}")
+        pass
