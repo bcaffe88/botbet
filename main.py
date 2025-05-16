@@ -22,15 +22,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def veredito(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("""⚙️ Critérios Técnicos de Entrada:
-- IA ≥ 85%
-- Minuto 18–27
+- IA ≥ 80%
+- Minuto 16–22
 - 3+ ataques perigosos recentes
 - 1+ chute no gol
 - Escanteios ≥ 2
-- Vento < 20 m/s
+- Vento < 15 m/s
 - Histórico gols 1T ≥ 2 (últimos 5 jogos)
 - Visitante dominante
-Entrada apenas com 3 ou mais critérios.""")
+Entrada apenas com 5 ou mais critérios.""")
 
 async def teste_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 Testando IA, aguarde...")
@@ -135,12 +135,12 @@ async def analisar(texto):
         resumo.append(f"• Posse: {posse[0]}% x {posse[1]}% {'✓' if posse_dominante else '✘'}")
 
         # Veredito com base na quantidade de critérios
-        if len(criterios) >= 4:
+        if len(criterios) >= 5:
             veredito = "✅ ENTRAR"
             confianca = "Alta"
             conclusao = "Cenário ideal com múltiplos critérios técnicos atendidos."
             asyncio.create_task(monitorar_odd(jogo, "https://bet365.com"))
-        elif len(criterios) == 3:
+        elif len(criterios) == 4:
             veredito = "⏳ AGUARDAR"
             confianca = "Média"
             conclusao = "Critérios parciais, cenário ainda incompleto."
