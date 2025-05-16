@@ -177,24 +177,14 @@ Confiança: {confianca}
 # TELETHON
 client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 
+
 @client.on(events.NewMessage())
 async def escutar(event):
-    print(f"📨 Mensagem recebida de {event.chat_id}:")
-    print(f"🔍 CHAT_ID recebido: {event.chat_id}")
-    print(event.message.message)
-
     if str(event.chat_id) == str(CHAT_ID_SINAL) and "OVER 0.5 HT" in event.message.message:
-        print("✅ Sinal detectado, enviando para análise.")
         await analisar(event.message.message)
-    else:
-        print("⚠️ Mensagem ignorada (ID ou palavra-chave não conferem).")
 
-# Inicialização final correta
-if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("veredito", veredito))
-    app.add_handler(CommandHandler("testeia", teste_ia))
-
-    client.start()  # inicia o Telethon
-    app.run_polling()  # inicia polling do bot
+async def iniciar(app):
+    client.start()
+    app_task = asyncio.create_task(app.run_polling())
+    await client.run_until_disconnected()
+    await app_task
