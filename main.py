@@ -102,11 +102,11 @@ async def analisar(texto):
 
         if ia and ia >= 80:
             criterios.append("IA")
-        resumo.append(f"• IA: {ia if ia else 'N/A'} {'✓' if ia and ia >= 85 else '✘'}")
+        resumo.append(f"• IA: {ia if ia else 'N/A'} {'✓' if ia and ia >= 80 else '✘'}")
 
         if minuto and 16 <= minuto <= 22:
             criterios.append("Minuto ideal")
-        resumo.append(f"• Minuto: {minuto if minuto else 'N/A'} {'✓' if minuto and 18 <= minuto <= 27 else '✘'}")
+        resumo.append(f"• Minuto: {minuto if minuto else 'N/A'} {'✓' if minuto and 16 <= minuto <= 22 else '✘'}")
 
         total_perigosos = sum(perigosos)
         desequilibrio = abs(perigosos[0] - perigosos[1]) >= 7
