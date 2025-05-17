@@ -175,7 +175,7 @@ Com base na análise abaixo, responda:
 Análise:
 {msg}
 """
-            explicacao = await asyncio.to_thread(gerar_resposta_ia, prompt_ia)
+            explicacao = await gerar_resposta_ia (prompt_ia)
             msg += f"\n\n🧠 Avaliação IA:\n{explicacao.strip()}"
         except Exception as e:
             msg += f"\n\n🧠 Avaliação IA:\n❌ Erro: {e}"
