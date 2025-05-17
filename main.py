@@ -163,9 +163,21 @@ Veredito: {veredito}
 Confiança: {confianca}
 """
 
-        try:
-            explicacao = await gerar_resposta_ia(msg)
-            msg += f"\n\n🧠 Avaliação IA:\n{explicacao}"
+                try:
+            prompt_ia = f"""
+Você é um analista técnico especialista em sinais esportivos ao vivo para entradas Over 0.5 HT.
+
+Com base na análise abaixo, responda de forma objetiva:
+
+1. Quais critérios ainda estão faltando para validar a entrada?
+2. Até qual minuto do jogo vale a pena aguardar esses critérios aparecerem?
+3. Caso não atenda, oriente de forma profissional o que observar antes de descartar.
+
+Análise:
+{msg}
+"""
+            explicacao = await asyncio.to_thread(gerar_resposta_ia, prompt_ia)
+            msg += f"\n\n🧠 Avaliação IA:\n{explicacao.strip()}"
         except Exception as e:
             msg += f"\n\n🧠 Avaliação IA:\n❌ Erro: {e}"
 
