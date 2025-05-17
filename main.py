@@ -163,7 +163,7 @@ Veredito: {veredito}
 Confiança: {confianca}
 """
 
-        try:
+    try:
             prompt_ia = f"""
 Você é um analista técnico especialista em sinais esportivos ao vivo para entradas Over 0.5 HT.
 
