@@ -153,7 +153,7 @@ async def analisar(texto):
         # Mensagem final
         msg = f"""{veredito} (Sinal Técnico) – {jogo}
 
-Análise conforme o Prompt Fixo:
+Análise:
 {chr(10).join(resumo)}
 
 📌 Conclusão:
