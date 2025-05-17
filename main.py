@@ -187,7 +187,6 @@ if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("veredito", veredito))
-    app.add_handler(CommandHandler("testeia", teste_ia))
 
     client.start()  # inicia o Telethon
     app.run_polling()  # inicia polling do bot
