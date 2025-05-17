@@ -162,16 +162,15 @@ Análise:
 Veredito: {veredito}
 Confiança: {confianca}
 """
-
-    try:
+                # IA explicando a decisão
+        try:
             prompt_ia = f"""
 Você é um analista técnico especialista em sinais esportivos ao vivo para entradas Over 0.5 HT.
 
-Com base na análise abaixo, responda de forma objetiva:
-
+Com base na análise abaixo, responda:
 1. Quais critérios ainda estão faltando para validar a entrada?
-2. Até qual minuto do jogo vale a pena aguardar esses critérios aparecerem?
-3. Caso não atenda, oriente de forma profissional o que observar antes de descartar.
+2. Até qual minuto do jogo vale a pena aguardar esses critérios?
+3. Quando deve-se descartar definitivamente a entrada?
 
 Análise:
 {msg}
@@ -181,6 +180,7 @@ Análise:
         except Exception as e:
             msg += f"\n\n🧠 Avaliação IA:\n❌ Erro: {e}"
 
+        # Envio final
         await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
 
     except Exception as e:
