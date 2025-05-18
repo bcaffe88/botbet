@@ -88,10 +88,10 @@ async def analisar(texto):
         criterios, resumo = [], []
         pontos = 0
 
-        if ia and ia >= 80:
+        if ia and ia >= 75:
             criterios.append("IA")
             pontos += 2
-        resumo.append(f"• IA: {ia} {'✓' if ia and ia >= 80 else '✗'}")
+        resumo.append(f"• IA: {ia} {'✔️' if ia and ia >= 80 else '✗'}")
 
         if minuto and 16 <= minuto <= 22:
             criterios.append("Minuto ideal")
@@ -121,7 +121,7 @@ async def analisar(texto):
             criterios.append("Posse dominante")
             pontos += 1
 
-        if pontos >= 8:
+        if pontos >= 7:
             odd = await monitorar_odd(jogo, "https://bet365.com")
             veredito = "ENTRAR ✅"
             confianca = "Alta"
