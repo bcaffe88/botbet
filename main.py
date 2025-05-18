@@ -125,10 +125,8 @@ async def analisar(texto):
     veredito = "ENTRAR ✅"
     confianca = "Alta"
     conclusao = "100.00 responsabilidade."
-
-    # 🔍 Buscar a odd ANTES de montar a mensagem
     odd = await monitorar_odd(jogo, "https://bet365.com")
-
+    
     msg = f"""⚽️ {veredito} {jogo}
 
 🤖 OVERBOT VIP:
