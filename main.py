@@ -138,7 +138,7 @@ DYOR: {conclusao}"""
 
     # ✅ Enviar a mensagem para o grupo destino
     await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
-else:
+        else:
     print("❌ Veredito não é 'ENTRAR'. Nenhum envio será feito.")
         else:
             print("❌ Veredito não é 'ENTRAR'. Nenhum envio será feito.")
