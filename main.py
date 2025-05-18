@@ -41,7 +41,11 @@ async def teste_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Erro ao testar IA:\n{e}")
 
 # Odds
+def normalizar(texto):
+    return unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8').lower()
+
 async def monitorar_odd(jogo, link, timeout=300):
+    print(f"⏳ Iniciando monitoramento de odd para {jogo}")
     url = f"https://api.the-odds-api.com/v4/sports/soccer/odds/?regions=eu&markets=totals&apiKey={ODDS_API_KEY}"
     inicio = time.time()
     while time.time() - inicio < timeout:
@@ -49,23 +53,31 @@ async def monitorar_odd(jogo, link, timeout=300):
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as resp:
                     data = await resp.json()
+                    print("📥 Resposta da API de odds recebida")
+                    if isinstance(data, dict):
+                        print("❌ Dados de odds inválidos (esperado lista):", data)
+                        return
                     for partida in data:
                         nome = partida.get("home_team", "") + " x " + partida.get("away_team", "")
-                        if jogo.lower() in nome.lower():
+                        if normalizar(jogo) in normalizar(nome):
                             for bk in partida.get("bookmakers", []):
                                 for mkt in bk.get("markets", []):
                                     if mkt["key"] == "totals":
                                         for linha in mkt["outcomes"]:
                                             if linha["point"] == 0.5 and linha["name"] == "Over":
                                                 odd = linha["price"]
+                                                print(f"🔍 Odd encontrada: {odd} para jogo {nome}")
                                                 if odd >= 1.50:
                                                     msg = f"⚽️ ENTRADA VALIDADA\n\n📌 Jogo: {nome}\n📈 Odd +0.5 HT: {odd}\n💰 Valor sugerido: R$15"
-                                                    await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg,
-                                                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("👉 Apostar agora", url=link)]]))
+                                                    await bot.send_message(
+                                                        chat_id=CHAT_ID_DESTINO,
+                                                        text=msg,
+                                                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔥 Apostar agora", url=link)]]))
                                                     return
         except Exception as e:
             print("❌ Erro monitorando odd:", e)
         await asyncio.sleep(30)
+
 
 # ANÁLISE
 async def analisar(texto):
