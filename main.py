@@ -122,12 +122,14 @@ async def analisar(texto):
             pontos += 1
 
         if pontos >= 7:
-            veredito = "ENTRAR ✅"
-            confianca = "Alta"
-            conclusao = "100.00 responsabilidade."
-            odd = await monitorar_odd(jogo, "https://bet365.com")
+    veredito = "ENTRAR ✅"
+    confianca = "Alta"
+    conclusao = "100.00 responsabilidade."
 
-            msg = f"""⚽️ {veredito} {jogo}
+    # 🔍 Buscar a odd ANTES de montar a mensagem
+    odd = await monitorar_odd(jogo, "https://bet365.com")
+
+    msg = f"""⚽️ {veredito} {jogo}
 
 🤖 OVERBOT VIP:
 {chr(10).join(resumo)}
@@ -135,7 +137,11 @@ async def analisar(texto):
 📋 ODD: {odd if odd else 'A definir'}
 Confiança: {confianca}
 DYOR: {conclusao}"""
-            await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
+
+    # ✅ Enviar a mensagem para o grupo destino
+    await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
+else:
+    print("❌ Veredito não é 'ENTRAR'. Nenhum envio será feito.")
         else:
             print("❌ Veredito não é 'ENTRAR'. Nenhum envio será feito.")
 
