@@ -121,11 +121,12 @@ async def analisar(texto):
             criterios.append("Posse dominante")
             pontos += 1
 
-        if pontos >= 8:
+               if pontos >= 8:
             veredito = "ENTRAR ✅"
             confianca = "Alta"
             conclusao = "100.00 responsabilidade."
-        
+            odd = await monitorar_odd(jogo, "https://bet365.com")
+
             msg = f"""⚽️ {veredito} {jogo}
 
 🤖 OVERBOT VIP:
@@ -137,10 +138,10 @@ DYOR: {conclusao}"""
             await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
         else:
             print("❌ Veredito não é 'ENTRAR'. Nenhum envio será feito.")
-        
-        except Exception as e:
-            print("❌ Erro ao analisar:", e)
 
+    except Exception as e:
+        print("❌ Erro ao analisar:", e)
+        
 # TELETHON
 client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 
