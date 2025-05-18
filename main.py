@@ -15,30 +15,23 @@ CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"))
 ODDS_API_KEY = os.getenv("ODDS_API_KEY")
 
 bot = Bot(token=BOT_TOKEN)
+CACHE_PATH = "ultimas_msgs.json"
 
+def carregar_cache():
+    try:
+        with open(CACHE_PATH, "r") as f:
+            return json.load(f)
+    except:
+        return []
+
+def salvar_cache(cache):
+    with open(CACHE_PATH, "w") as f:
+        json.dump(cache[-50:], f)  # mantém só os últimos 50
+
+ultimas_msgs = carregar_cache()
 # Comandos
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Bot de sinais refinados ativo com polling!")
-
-async def veredito(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("""⚙️ Critérios Técnicos de Entrada:
-- IA ≥ 80%
-- Minuto 16–22
-- 3+ ataques perigosos recentes
-- 1+ chute no gol
-- Escanteios ≥ 2
-- Vento < 15 m/s
-- Histórico gols 1T ≥ 2 (últimos 5 jogos)
-- Visitante dominante
-Entrada apenas com 5 ou mais critérios.""")
-
-async def teste_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 Testando IA, aguarde...")
-    try:
-        resposta = await gerar_resposta_ia("Teste de resposta da IA. Você está funcionando?")
-        await update.message.reply_text(f"🧠 Resposta da IA:\n{resposta}")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Erro ao testar IA:\n{e}")
 
 # Odds
 def normalizar(texto):
@@ -154,21 +147,21 @@ async def analisar(texto):
         resumo.append(f"• Posse: {posse[0]}% x {posse[1]}% {'✓' if posse[0] >= 60 or posse[1] >= 60 else '✗'}")
 
         if pontos >= 8:
-            veredito = "✅ ENTRAR"
+            veredito = "ENTRAR ✅"
             confianca = "Alta"
-            conclusao = "Alta confluência técnica identificada."
+            conclusao = "Bom aproveitamento."
         elif 5 <= pontos < 8:
-            veredito = "⏳ AGUARDAR"
+            veredito = "AGUARDAR ⏳"
             confianca = "Média"
-            conclusao = "Critérios parciais detectados."
+            conclusao = "Critérios parciais."
         else:
-            veredito = "❌ NÃO ENTRAR"
+            veredito = "NÃO ENTRAR ❌"
             confianca = "Baixa"
-            conclusao = "Confluência insuficiente no momento."
+            conclusao = "Poucas chances criadas no momento."
 
-        msg = f"""{veredito} (Sinal Técnico) – {jogo}
+        msg = f"""⚽️{veredito}, {jogo}
 
-Análise OVERBOT VIP:
+🤖 Análise OVERBOT VIP:
 {chr(10).join(resumo)}
 
 📌 Conclusão:
@@ -209,8 +202,6 @@ async def escutar(event):
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("veredito", veredito))
-    app.add_handler(CommandHandler("testeia", teste_ia))
 
     client.start()  # inicia o Telethon
     app.run_polling()  # inicia polling do bot
