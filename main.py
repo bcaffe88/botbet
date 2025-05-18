@@ -29,17 +29,24 @@ async def verificar_gol_ht(nome_jogo):
             async with session.get("https://api.sofascore.com/api/v1/sport/football/events/live") as resp:
                 data = await resp.json()
                 eventos = data.get("events", [])
-                for evento in eventos:
-                    home = evento["homeTeam"]["name"]
-                    away = evento["awayTeam"]["name"]
-                    nome_match = f"{home} x {away}"
 
+                print("🧩 Jogos ao vivo encontrados:")
+                for evento in eventos:
+                    casa = evento["homeTeam"]["name"]
+                    fora = evento["awayTeam"]["name"]
+                    nome_match = f"{casa} x {fora}"
+                    print(f"- {nome_match}")
+
+                    # Verificação flexível com normalização
                     if normalizar(nome_jogo) in normalizar(nome_match):
                         gols_1t = evento.get("homeScore", {}).get("period1", 0) + evento.get("awayScore", {}).get("period1", 0)
-                        print(f"🔎 Resultado encontrado: {nome_match} | Gols 1T: {gols_1t}")
+                        print(f"🔍 Comparando: {nome_jogo} ≈ {nome_match} | Gols 1T: {gols_1t}")
                         return "✅ BATEU" if gols_1t >= 1 else "❌ NÃO BATEU"
+
+        print("⚠️ Jogo não encontrado nos ao vivo da Sofascore.")
     except Exception as e:
         print("❌ Erro ao verificar Sofascore:", e)
+
     return "⏳ NÃO LOCALIZADO"
 
 # Análise do sinal
