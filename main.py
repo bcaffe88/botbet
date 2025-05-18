@@ -127,11 +127,11 @@ async def analisar(texto):
             responsabilidade = "100.00."
 
             msg = f"""⚽️ {veredito} 
-            🏟️ {jogo}
-            🤖 OVERBOT VIP:
-            {chr(10).join(resumo)} 
-            📋 ODD: {odd if odd else 'A definir'}
-            Responsabilidade: {responsabilidade}"""
+🏟️ {jogo}
+🤖 OVERBOT VIP:
+{chr(10).join(resumo)} 
+📋 ODD: {odd if odd else 'A definir'}
+Responsabilidade: {responsabilidade}"""
             await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
         else:
             print("❌ Veredito não é 'ENTRAR'. Nenhum envio será feito.")
