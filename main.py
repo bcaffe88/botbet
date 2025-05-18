@@ -48,7 +48,7 @@ async def monitorar_odd(jogo, link, timeout=300):
                                                 print(f"🔍 Odd encontrada: {odd} para jogo {nome}")
                                                 if odd >= 1.50:
                                                     msg = f"⚽️ ENTRADA VALIDADA\n\n📌 Jogo: {nome}\n📈 Odd +0.5 HT: {odd}\n💰 Seguir Gestão "
-                                                    await bot.send_message(
+                                                    {odd} bot.send_message(
                                                         chat_id=CHAT_ID_DESTINO,
                                                         text=msg,
                                                         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔥 Apostar agora", url=link)]]))
@@ -129,31 +129,16 @@ async def analisar(texto):
         if pontos >= 8:
             veredito = "ENTRAR ✅"
             confianca = "Alta"
-            conclusao = "Bom aproveitamento."
+            conclusao = "100.00 responsabilidade."
         
             msg = f"""⚽️ {veredito} {jogo}
 
 🤖 OVERBOT VIP:
 {chr(10).join(resumo)}
 
-📌 Conclusão:
-{conclusao}
-
-Veredito: {veredito}
-Confiança: {confianca}"""
-
-        try:
-            print("🤖 Enviando mensagem para IA...")
-            explicacao = await gerar_resposta_ia(msg)
-            msg += f"\n\n🤔 Avaliação IA:\n{explicacao}"
-        except Exception as e:
-            msg += f"\n\n🤔 Avaliação IA:\n❌ Erro: {e}"
-
-        print("📤 Enviando análise final para o grupo destino")
-        await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
-
-    except Exception as e:
-        print("❌ Erro ao analisar:", e)
+📊 ODD: {odd}
+Confiança: {confianca}
+DYOR: {conclusao}"""
 
 # TELETHON
 client = TelegramClient("sessao_sinais", API_ID, API_HASH)
