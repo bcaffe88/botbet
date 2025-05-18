@@ -14,7 +14,7 @@ async def gerar_resposta_ia(pergunta):
                     com mais de 10 anos de experiência em
                     jogos ao vivo com gols over 0.5 ht, entusiasta de apostas esportivas
                     comente como o jogo está fluindo, quais chances se esperar dos próximos
-                    minutos para realizar uma boa entrada""  
+                    minutos para realizar uma boa entrada, seja breve, claro e objetivo"""  
                     )
                 },
                 {"role": "user", "content": pergunta}
