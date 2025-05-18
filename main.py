@@ -3,7 +3,7 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
-import os, re, asyncio, aiohttp, time
+import os, re, asyncio, aiohttp, time, unicodedata, json
 from ia_openai import gerar_resposta_ia
 
 # Configurações
