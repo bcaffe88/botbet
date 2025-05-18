@@ -4,7 +4,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
 import os, re, asyncio, aiohttp, time, unicodedata, json
-from ia_openai import gerar_resposta_ia
 
 # Configurações
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -15,20 +14,7 @@ CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"))
 ODDS_API_KEY = os.getenv("ODDS_API_KEY")
 
 bot = Bot(token=BOT_TOKEN)
-CACHE_PATH = "ultimas_msgs.json"
 
-def carregar_cache():
-    try:
-        with open(CACHE_PATH, "r") as f:
-            return json.load(f)
-    except:
-        return []
-
-def salvar_cache(cache):
-    with open(CACHE_PATH, "w") as f:
-        json.dump(cache[-50:], f)  # mantém só os últimos 50
-
-ultimas_msgs = carregar_cache()
 # Comandos
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Bot de sinais refinados ativo com polling!")
@@ -61,7 +47,7 @@ async def monitorar_odd(jogo, link, timeout=300):
                                                 odd = linha["price"]
                                                 print(f"🔍 Odd encontrada: {odd} para jogo {nome}")
                                                 if odd >= 1.50:
-                                                    msg = f"⚽️ ENTRADA VALIDADA\n\n📌 Jogo: {nome}\n📈 Odd +0.5 HT: {odd}\n💰 Valor sugerido: R$15"
+                                                    msg = f"⚽️ ENTRADA VALIDADA\n\n📌 Jogo: {nome}\n📈 Odd +0.5 HT: {odd}\n💰 Seguir Gestão "
                                                     await bot.send_message(
                                                         chat_id=CHAT_ID_DESTINO,
                                                         text=msg,
@@ -115,27 +101,22 @@ async def analisar(texto):
         if minuto and 16 <= minuto <= 22:
             criterios.append("Minuto ideal")
             pontos += 1
-        resumo.append(f"• Minuto: {minuto} {'✓' if minuto and 16 <= minuto <= 22 else '✗'}")
 
         if sum(perigosos) >= 10 and abs(perigosos[0] - perigosos[1]) >= 7:
             criterios.append("Ataques perigosos")
             pontos += 2
-        resumo.append(f"• Ataques perigosos: {perigosos[0]} x {perigosos[1]} {'✓' if sum(perigosos) >= 10 else '✗'}")
 
         if sum(no_gol) >= 1:
             criterios.append("Finalizações no gol")
             pontos += 2
-        resumo.append(f"• Finalizações no gol: {no_gol[0]} x {no_gol[1]} {'✓' if sum(no_gol) >= 1 else '✗'}")
 
         if sum(escanteios) >= 2:
             criterios.append("Escanteios")
             pontos += 1
-        resumo.append(f"• Escanteios: {escanteios[0]} x {escanteios[1]} {'✓' if sum(escanteios) >= 2 else '✗'}")
 
         if vento and vento < 15:
             criterios.append("Vento ideal")
             pontos += 1
-        resumo.append(f"• Vento: {vento} m/s {'✓' if vento and vento < 15 else '✗'}")
 
         if sum(chutes) >= 4:
             criterios.append("Chutes totais")
@@ -144,22 +125,12 @@ async def analisar(texto):
         if posse[0] >= 60 or posse[1] >= 60:
             criterios.append("Posse dominante")
             pontos += 1
-        resumo.append(f"• Posse: {posse[0]}% x {posse[1]}% {'✓' if posse[0] >= 60 or posse[1] >= 60 else '✗'}")
 
         if pontos >= 8:
             veredito = "ENTRAR ✅"
             confianca = "Alta"
             conclusao = "Bom aproveitamento."
-        elif 5 <= pontos < 8:
-            veredito = "AGUARDAR ⏳"
-            confianca = "Média"
-            conclusao = "Critérios parciais."
-        else:
-            veredito = "NÃO ENTRAR ❌"
-            confianca = "Baixa"
-            conclusao = "Poucas chances criadas no momento."
-
-        if veredito != "NÃO ENTRAR ❌":
+        
             msg = f"""⚽️ {veredito} {jogo}
 
 🤖 OVERBOT VIP:
