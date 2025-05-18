@@ -1,9 +1,9 @@
-# main.py - Sinais refinados com polling e telethon
+# main.py - Sinais refinados com verificação automática de gol HT via Sofascore
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
+from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
-import os, re, asyncio, aiohttp, time, unicodedata, json
+import os, re, asyncio, aiohttp, time, unicodedata
 
 # Configurações
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -11,49 +11,38 @@ API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 CHAT_ID_SINAL = int(os.getenv("CHAT_ID_SINAL"))
 CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"))
-ODDS_API_KEY = os.getenv("ODDS_API_KEY")
 
 bot = Bot(token=BOT_TOKEN)
 
-# Comandos
+# Comando /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🤖 Bot de sinais refinados ativo com polling!")
+    await update.message.reply_text("🤖 Bot de sinais refinados ativo!")
 
-# Odds
+# Normalização de texto
 def normalizar(texto):
     return unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8').lower()
 
-async def monitorar_odd(jogo, link, timeout=300):
-    print(f"⏳ Iniciando monitoramento de odd para {jogo}")
-    url = f"https://api.the-odds-api.com/v4/sports/soccer/odds/?regions=eu&markets=totals&apiKey={ODDS_API_KEY}"
-    inicio = time.time()
-    while time.time() - inicio < timeout:
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as resp:
-                    data = await resp.json()
-                    print("🗕️ Resposta da API de odds recebida")
-                    if isinstance(data, dict):
-                        print("❌ Dados de odds inválidos (esperado lista):", data)
-                        return None
-                    for partida in data:
-                        nome = partida.get("home_team", "") + " x " + partida.get("away_team", "")
-                        if normalizar(jogo) in normalizar(nome):
-                            for bk in partida.get("bookmakers", []):
-                                for mkt in bk.get("markets", []):
-                                    if mkt["key"] == "totals":
-                                        for linha in mkt["outcomes"]:
-                                            if linha["point"] == 0.5 and linha["name"] == "Over":
-                                                odd = linha["price"]
-                                                print(f"🔍 Odd encontrada: {odd} para jogo {nome}")
-                                                if odd >= 1.50:
-                                                    return odd
-        except Exception as e:
-            print("❌ Erro monitorando odd:", e)
-        await asyncio.sleep(30)
-    return None
+# Verifica se houve gol no 1º tempo via Sofascore
+async def verificar_gol_ht(nome_jogo):
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://api.sofascore.com/api/v1/sport/football/events/live") as resp:
+                data = await resp.json()
+                eventos = data.get("events", [])
+                for evento in eventos:
+                    home = evento["homeTeam"]["name"]
+                    away = evento["awayTeam"]["name"]
+                    nome_match = f"{home} x {away}"
 
-# ANÁLISE
+                    if normalizar(nome_jogo) in normalizar(nome_match):
+                        gols_1t = evento.get("homeScore", {}).get("period1", 0) + evento.get("awayScore", {}).get("period1", 0)
+                        print(f"🔎 Resultado encontrado: {nome_match} | Gols 1T: {gols_1t}")
+                        return "✅ BATEU" if gols_1t >= 1 else "❌ NÃO BATEU"
+    except Exception as e:
+        print("❌ Erro ao verificar Sofascore:", e)
+    return "⏳ NÃO LOCALIZADO"
+
+# Análise do sinal
 async def analisar(texto):
     print("📊 Iniciando análise do sinal")
     try:
@@ -91,7 +80,7 @@ async def analisar(texto):
         if ia and ia >= 75:
             criterios.append("IA")
             pontos += 2
-        resumo.append(f"• IA: {ia} {'✔️' if ia and ia >= 80 else '✗'}")
+        resumo.append(f"• IA: {ia} {'✓' if ia and ia >= 80 else '✗'}")
 
         if minuto and 16 <= minuto <= 22:
             criterios.append("Minuto ideal")
@@ -122,17 +111,21 @@ async def analisar(texto):
             pontos += 1
 
         if pontos >= 7:
-            odd = await monitorar_odd(jogo, "https://bet365.com")
             veredito = "ENTRAR ✅"
-            responsabilidade = "100.00."
+            conclusao = "100.00."
 
             msg = f"""⚽️ {veredito} 
-🏟️ {jogo}
+{jogo}
+
 🤖 OVERBOT VIP:
-{chr(10).join(resumo)} 
-📋 ODD: {odd if odd else 'A definir'}
-Responsabilidade: {responsabilidade}"""
+{chr(10).join(resumo)}
+Responsabilidade: {conclusao}"""
             await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
+
+            # ⏳ Aguarda 15 minutos para verificar resultado
+            await asyncio.sleep(900)
+            resultado = await verificar_gol_ht(jogo)
+            await bot.send_message(chat_id=CHAT_ID_DESTINO, text=f"📢 Resultado do sinal {jogo}: {resultado}")
         else:
             print("❌ Veredito não é 'ENTRAR'. Nenhum envio será feito.")
 
@@ -154,10 +147,10 @@ async def escutar(event):
     else:
         print("⚠️ Mensagem ignorada (ID ou palavra-chave não conferem).")
 
-# Inicialização final correta
+# Inicialização
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
 
-    client.start()  # inicia o Telethon
-    app.run_polling()  # inicia polling do bot
+    client.start()
+    app.run_polling()
