@@ -1,11 +1,12 @@
-# main.py - Sinais refinados com conta pessoal (Telethon) + análise automática com sistema de pontos e odds refinada
+# main.py - Sinais refinados com polling e telethon
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
-import os, re, asyncio, aiohttp, time, unicodedata
+import os, re, asyncio, aiohttp, time
 from ia_openai import gerar_resposta_ia
 
+# Configurações
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
@@ -15,6 +16,7 @@ ODDS_API_KEY = os.getenv("ODDS_API_KEY")
 
 bot = Bot(token=BOT_TOKEN)
 
+# Comandos
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Bot de sinais refinados ativo com polling!")
 
@@ -28,11 +30,17 @@ async def veredito(update: Update, context: ContextTypes.DEFAULT_TYPE):
 - Vento < 15 m/s
 - Histórico gols 1T ≥ 2 (últimos 5 jogos)
 - Visitante dominante
-Entrada recomendada a partir de 5 critérios com maior peso.""")
+Entrada apenas com 5 ou mais critérios.""")
 
-def normalizar(texto):
-    return unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8').lower()
+async def teste_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🔍 Testando IA, aguarde...")
+    try:
+        resposta = await gerar_resposta_ia("Teste de resposta da IA. Você está funcionando?")
+        await update.message.reply_text(f"🧠 Resposta da IA:\n{resposta}")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Erro ao testar IA:\n{e}")
 
+# Odds
 async def monitorar_odd(jogo, link, timeout=300):
     url = f"https://api.the-odds-api.com/v4/sports/soccer/odds/?regions=eu&markets=totals&apiKey={ODDS_API_KEY}"
     inicio = time.time()
@@ -41,30 +49,25 @@ async def monitorar_odd(jogo, link, timeout=300):
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as resp:
                     data = await resp.json()
-                    if isinstance(data, dict):
-                        print("❌ Dados de odds inválidos (esperado lista):", data)
-                        return
                     for partida in data:
                         nome = partida.get("home_team", "") + " x " + partida.get("away_team", "")
-                        if normalizar(jogo) in normalizar(nome):
+                        if jogo.lower() in nome.lower():
                             for bk in partida.get("bookmakers", []):
                                 for mkt in bk.get("markets", []):
                                     if mkt["key"] == "totals":
                                         for linha in mkt["outcomes"]:
                                             if linha["point"] == 0.5 and linha["name"] == "Over":
                                                 odd = linha["price"]
-                                                print(f"🔍 Odd encontrada: {odd} para jogo {nome}")
                                                 if odd >= 1.50:
                                                     msg = f"⚽️ ENTRADA VALIDADA\n\n📌 Jogo: {nome}\n📈 Odd +0.5 HT: {odd}\n💰 Valor sugerido: R$15"
-                                                    await bot.send_message(
-                                                        chat_id=CHAT_ID_DESTINO,
-                                                        text=msg,
-                                                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🕵️‍♂️ Apostar agora", url=link)]]))
+                                                    await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg,
+                                                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("👉 Apostar agora", url=link)]]))
                                                     return
         except Exception as e:
             print("❌ Erro monitorando odd:", e)
         await asyncio.sleep(30)
 
+# ANÁLISE
 async def analisar(texto):
     try:
         jogo = re.search(r'⚽️\s*(.+)', texto)
@@ -76,110 +79,134 @@ async def analisar(texto):
         ia_match = re.search(r"OVER 0\.5 HT:\s*([\d.]+)%", texto)
         ia = float(ia_match.group(1)) if ia_match else None
 
-        perigosos = list(map(int, re.findall(r"Ataques Perigosos:\s*(\d+)/(\d+)", texto)[0])) if "Ataques Perigosos" in texto else [0, 0]
-        posse = list(map(int, re.findall(r"Posse de Bola:\s*(\d+)/(\d+)", texto)[0])) if "Posse de Bola" in texto else [0, 0]
-        escanteios = list(map(int, re.findall(r"Escanteios:\s*(\d+)/(\d+)", texto)[0])) if "Escanteios" in texto else [0, 0]
-        no_gol = list(map(int, re.findall(r"No Gol:\s*(\d+)/(\d+)", texto)[0])) if "No Gol" in texto else [0, 0]
-        chutes = list(map(int, re.findall(r"Total:\s*(\d+)/(\d+)", texto)[0])) if "Total:" in texto else [0, 0]
+        # Verificações seguras com fallback
+        match_perigosos = re.findall(r"Ataques Perigosos:\s*(\d+)/(\d+)", texto)
+        perigosos = list(map(int, match_perigosos[0])) if match_perigosos else [0, 0]
 
-        vento = float(re.search(r"💨\s*([\d.]+)\s*m/s", texto).group(1)) if "💨" in texto else None
+        match_posse = re.findall(r"Posse de Bola:\s*(\d+)/(\d+)", texto)
+        posse = list(map(int, match_posse[0])) if match_posse else [0, 0]
+
+        match_escanteios = re.findall(r"Escanteios:\s*(\d+)/(\d+)", texto)
+        escanteios = list(map(int, match_escanteios[0])) if match_escanteios else [0, 0]
+
+        match_no_gol = re.findall(r"No Gol:\s*(\d+)/(\d+)", texto)
+        no_gol = list(map(int, match_no_gol[0])) if match_no_gol else [0, 0]
+
+        match_chutes = re.findall(r"Total:\s*(\d+)/(\d+)", texto)
+        chutes = list(map(int, match_chutes[0])) if match_chutes else [0, 0]
+
+        vento_match = re.search(r"💨\s*([\d.]+)\s*m/s", texto)
+        vento = float(vento_match.group(1)) if vento_match else None
 
         criterios, resumo = [], []
-        pontos = 0
 
         if ia and ia >= 80:
             criterios.append("IA")
-            pontos += 2
-        resumo.append(f"• IA: {ia} {'✓' if ia and ia >= 80 else '✘'}")
+        resumo.append(f"• IA: {ia if ia else 'N/A'} {'✓' if ia and ia >= 80 else '✘'}")
 
         if minuto and 16 <= minuto <= 22:
             criterios.append("Minuto ideal")
-            pontos += 1
-        resumo.append(f"• Minuto: {minuto} {'✓' if minuto and 16 <= minuto <= 22 else '✘'}")
+        resumo.append(f"• Minuto: {minuto if minuto else 'N/A'} {'✓' if minuto and 16 <= minuto <= 22 else '✘'}")
 
-        if sum(perigosos) >= 10 and abs(perigosos[0] - perigosos[1]) >= 7:
+        total_perigosos = sum(perigosos)
+        desequilibrio = abs(perigosos[0] - perigosos[1]) >= 7
+        if total_perigosos >= 10 and desequilibrio:
             criterios.append("Ataques perigosos")
-            pontos += 2
-        resumo.append(f"• Ataques perigosos: {perigosos[0]} x {perigosos[1]} {'✓' if sum(perigosos) >= 10 else '✘'}")
+        resumo.append(f"• Ataques perigosos: {perigosos[0]} x {perigosos[1]} {'✓' if total_perigosos >= 10 and desequilibrio else '✘'}")
 
         if sum(no_gol) >= 1:
             criterios.append("Finalizações no gol")
-            pontos += 2
         resumo.append(f"• Finalizações no gol: {no_gol[0]} x {no_gol[1]} {'✓' if sum(no_gol) >= 1 else '✘'}")
 
         if sum(escanteios) >= 2:
             criterios.append("Escanteios")
-            pontos += 1
         resumo.append(f"• Escanteios: {escanteios[0]} x {escanteios[1]} {'✓' if sum(escanteios) >= 2 else '✘'}")
 
-        if vento and vento < 15:
+        if vento is not None and vento < 15:
             criterios.append("Vento ideal")
-            pontos += 1
         resumo.append(f"• Vento: {vento} m/s {'✓' if vento and vento < 15 else '✘'}")
 
         if sum(chutes) >= 4:
             criterios.append("Chutes totais")
-            pontos += 1
 
-        if posse[0] >= 60 or posse[1] >= 60:
+        posse_dominante = posse[0] >= 60 or posse[1] >= 60
+        if posse_dominante:
             criterios.append("Posse dominante")
-            pontos += 1
-        resumo.append(f"• Posse: {posse[0]}% x {posse[1]}% {'✓' if posse[0] >= 60 or posse[1] >= 60 else '✘'}")
+        resumo.append(f"• Posse: {posse[0]}% x {posse[1]}% {'✓' if posse_dominante else '✘'}")
 
-        if pontos >= 8:
+        # Veredito com base na quantidade de critérios
+        if len(criterios) >= 5:
             veredito = "✅ ENTRAR"
             confianca = "Alta"
-            conclusao = "Alta confluência técnica identificada."
-        elif 5 <= pontos < 8:
+            conclusao = "Cenário ideal com múltiplos critérios técnicos atendidos."
+            asyncio.create_task(monitorar_odd(jogo, "https://bet365.com"))
+        elif len(criterios) == 4:
             veredito = "⏳ AGUARDAR"
             confianca = "Média"
-            conclusao = "Critérios parciais detectados."
+            conclusao = "Critérios parciais, cenário ainda incompleto."
+            asyncio.create_task(monitorar_odd(jogo, "https://bet365.com"))
         else:
             veredito = "❌ NÃO ENTRAR"
             confianca = "Baixa"
-            conclusao = "Confluência insuficiente no momento."
+            conclusao = "Falta de confluência entre os critérios."
 
-        prompt_extra = f"\n\nContexto adicional:\nJogo: {jogo}\nMinuto: {minuto}\nCritérios técnicos válidos: {', '.join(criterios)}.\nVerifique se houve gol no 1T nos últimos 5 jogos. Verifique se a liga tem padrão over ou under. Verifique se os últimos confrontos entre os times indicam dominância."
-
+        # Mensagem final
         msg = f"""{veredito} (Sinal Técnico) – {jogo}
 
-Análise conforme o Prompt Fixo:
+Análise:
 {chr(10).join(resumo)}
 
 📌 Conclusão:
 {conclusao}
 
 Veredito: {veredito}
-Confiança: {confianca}"""
-
+Confiança: {confianca}
+"""
+                # IA explicando a decisão
         try:
-            explicacao = await gerar_resposta_ia(msg + prompt_extra)
-            msg += f"\n\n🧐 Avaliação IA:\n{explicacao}"
-        except Exception as e:
-            msg += f"\n\n🧐 Avaliação IA:\n❌ Erro: {e}"
+            prompt_ia = f"""
+Você é um analista técnico especialista em sinais esportivos ao vivo para entradas Over 0.5 HT.
 
+Com base na análise abaixo, responda:
+1. Quais critérios ainda estão faltando para validar a entrada?
+2. Até qual minuto do jogo vale a pena aguardar esses critérios?
+3. Quando deve-se descartar definitivamente a entrada?
+
+Análise:
+{msg}
+"""
+            explicacao = await gerar_resposta_ia (prompt_ia)
+            msg += f"\n\n🧠 Avaliação IA:\n{explicacao.strip()}"
+        except Exception as e:
+            msg += f"\n\n🧠 Avaliação IA:\n❌ Erro: {e}"
+
+        # Envio final
         await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
 
     except Exception as e:
         print("❌ Erro ao analisar:", e)
 
+# TELETHON
 client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 
 @client.on(events.NewMessage())
 async def escutar(event):
-    if str(event.chat_id) == str(CHAT_ID_SINAL):
-        try:
-            if "OVER 0.5 HT" in event.message.message:
-                if not event.out:
-                    await client.forward_messages(CHAT_ID_DESTINO, event.message)
-                    await analisar(event.message.message)
-        except Exception as e:
-            print(f"❌ Erro ao encaminhar ou analisar: {e}")
+    print(f"📨 Mensagem recebida de {event.chat_id}:")
+    print(f"🔍 CHAT_ID recebido: {event.chat_id}")
+    print(event.message.message)
 
+    if str(event.chat_id) == str(CHAT_ID_SINAL) and "OVER 0.5 HT" in event.message.message:
+        print("✅ Sinal detectado, enviando para análise.")
+        await analisar(event.message.message)
+    else:
+        print("⚠️ Mensagem ignorada (ID ou palavra-chave não conferem).")
+
+# Inicialização final correta
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("veredito", veredito))
+    app.add_handler(CommandHandler("testeia", teste_ia))
 
-    client.start()
-    app.run_polling()
+    client.start()  # inicia o Telethon
+    app.run_polling()  # inicia polling do bot
