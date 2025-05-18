@@ -159,9 +159,10 @@ async def analisar(texto):
             confianca = "Baixa"
             conclusao = "Poucas chances criadas no momento."
 
-        msg = f"""⚽️{veredito}, {jogo}
+        if veredito != "NÃO ENTRAR ❌":
+            msg = f"""⚽️ {veredito} {jogo}
 
-🤖 Análise OVERBOT VIP:
+🤖 OVERBOT VIP:
 {chr(10).join(resumo)}
 
 📌 Conclusão:
