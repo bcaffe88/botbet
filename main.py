@@ -35,7 +35,7 @@ async def monitorar_odd(jogo, link, timeout=300):
                     print("🗕️ Resposta da API de odds recebida")
                     if isinstance(data, dict):
                         print("❌ Dados de odds inválidos (esperado lista):", data)
-                        return
+                        return None
                     for partida in data:
                         nome = partida.get("home_team", "") + " x " + partida.get("away_team", "")
                         if normalizar(jogo) in normalizar(nome):
@@ -88,10 +88,10 @@ async def analisar(texto):
         criterios, resumo = [], []
         pontos = 0
 
-        if ia and ia >= 75:
+        if ia and ia >= 80:
             criterios.append("IA")
             pontos += 2
-        resumo.append(f"• IA: {ia} {'📡' if ia and ia >= 80 else '✗'}")
+        resumo.append(f"• IA: {ia} {'✓' if ia and ia >= 80 else '✗'}")
 
         if minuto and 16 <= minuto <= 22:
             criterios.append("Minuto ideal")
@@ -121,12 +121,12 @@ async def analisar(texto):
             criterios.append("Posse dominante")
             pontos += 1
 
-        if pontos >= 7:
+        if pontos >= 8:
+            odd = await monitorar_odd(jogo, "https://bet365.com")
             veredito = "ENTRAR ✅"
             confianca = "Alta"
             conclusao = "100.00 responsabilidade."
-            odd = await monitorar_odd(jogo, "https://bet365.com")
-    
+
             msg = f"""⚽️ {veredito} {jogo}
 
 🤖 OVERBOT VIP:
@@ -135,17 +135,13 @@ async def analisar(texto):
 📋 ODD: {odd if odd else 'A definir'}
 Confiança: {confianca}
 DYOR: {conclusao}"""
-
-    # ✅ Enviar a mensagem para o grupo destino
-    await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
-        else:
-    print("❌ Veredito não é 'ENTRAR'. Nenhum envio será feito.")
+            await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
         else:
             print("❌ Veredito não é 'ENTRAR'. Nenhum envio será feito.")
 
     except Exception as e:
         print("❌ Erro ao analisar:", e)
-        
+
 # TELETHON
 client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 
