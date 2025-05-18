@@ -119,38 +119,40 @@ async def analisar(texto):
 
         if pontos >= 7:
             veredito = "ENTRAR ✅"
-            conclusao = "100.00."
+            confianca = "Alta"
+            conclusao = "100.00 responsabilidade."
 
-            msg = f"""⚽️ {veredito} 
-{jogo}
+            msg = f"""⚽️ {veredito} {jogo}
 
 🤖 OVERBOT VIP:
 {chr(10).join(resumo)}
-Responsabilidade: {conclusao}"""
-            await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
 
-            # Aguarda 25 minutos para verificar o resultado do 1º tempo
-    await asyncio.sleep(1500)
-    resultado = await verificar_gol_ht(jogo)
+Confiança: {confianca}
+DYOR: {conclusao}"""
 
-    if resultado == "✅ BATEU":
-        resultado_final = "✅✅✅✅✅✅✅✅✅✅✅✅✅✅."
-    elif resultado == "❌ NÃO BATEU":
-        resultado_final = "❌❌❌❌❌❌❌❌❌❌❌❌❌❌."
-    else:
-        resultado_final = "⏳ Resultado do sinal: *Não foi possível localizar o jogo.*"
+            msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
 
-    msg_editado = f"""{msg}
+            # Espera 25 minutos
+            await asyncio.sleep(1500)
+            resultado = await verificar_gol_ht(jogo)
+
+            if resultado == "✅ BATEU":
+                resultado_final = "🚀 Resultado do sinal: ✅ *BATEU* no 1º tempo!"
+            elif resultado == "❌ NÃO BATEU":
+                resultado_final = "⚠️ Resultado do sinal: ❌ *NÃO BATEU* no 1º tempo."
+            else:
+                resultado_final = "⏳ Resultado do sinal: *Não foi possível localizar o jogo.*"
+
+            msg_editado = f"""{msg}
 
 {resultado_final}"""
 
-    # Edita a mesma mensagem com o resultado final
-    await bot.edit_message_text(
-        chat_id=CHAT_ID_DESTINO,
-        message_id=msg_enviada.message_id,
-        text=msg_editado,
-        parse_mode="Markdown"
-    )
+            await bot.edit_message_text(
+                chat_id=CHAT_ID_DESTINO,
+                message_id=msg_enviada.message_id,
+                text=msg_editado,
+                parse_mode="Markdown"
+            )
         else:
             print("❌ Veredito não é 'ENTRAR'. Nenhum envio será feito.")
 
