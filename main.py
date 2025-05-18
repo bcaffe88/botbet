@@ -41,6 +41,9 @@ async def monitorar_odd(jogo, link, timeout=300):
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as resp:
                     data = await resp.json()
+                    if isinstance(data, dict):
+                        print("❌ Dados de odds inválidos (esperado lista):", data)
+                        return
                     for partida in data:
                         nome = partida.get("home_team", "") + " x " + partida.get("away_team", "")
                         if normalizar(jogo) in normalizar(nome):
@@ -136,6 +139,8 @@ async def analisar(texto):
             confianca = "Baixa"
             conclusao = "Confluência insuficiente no momento."
 
+        prompt_extra = f"\n\nContexto adicional:\nJogo: {jogo}\nMinuto: {minuto}\nCritérios técnicos válidos: {', '.join(criterios)}.\nVerifique se houve gol no 1T nos últimos 5 jogos. Verifique se a liga tem padrão over ou under. Verifique se os últimos confrontos entre os times indicam dominância."
+
         msg = f"""{veredito} (Sinal Técnico) – {jogo}
 
 Análise conforme o Prompt Fixo:
@@ -146,8 +151,9 @@ Análise conforme o Prompt Fixo:
 
 Veredito: {veredito}
 Confiança: {confianca}"""
+
         try:
-            explicacao = await gerar_resposta_ia(msg)
+            explicacao = await gerar_resposta_ia(msg + prompt_extra)
             msg += f"\n\n🧐 Avaliação IA:\n{explicacao}"
         except Exception as e:
             msg += f"\n\n🧐 Avaliação IA:\n❌ Erro: {e}"
@@ -163,9 +169,10 @@ client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 async def escutar(event):
     if str(event.chat_id) == str(CHAT_ID_SINAL):
         try:
-            await client.forward_messages(CHAT_ID_DESTINO, event.message)
             if "OVER 0.5 HT" in event.message.message:
-                await analisar(event.message.message)
+                if not event.out:
+                    await client.forward_messages(CHAT_ID_DESTINO, event.message)
+                    await analisar(event.message.message)
         except Exception as e:
             print(f"❌ Erro ao encaminhar ou analisar: {e}")
 
