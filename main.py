@@ -129,10 +129,28 @@ async def analisar(texto):
 Responsabilidade: {conclusao}"""
             await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
 
-            # ⏳ Aguarda 15 minutos para verificar resultado
-            await asyncio.sleep(900)
-            resultado = await verificar_gol_ht(jogo)
-            await bot.send_message(chat_id=CHAT_ID_DESTINO, text=f"📢 Resultado do sinal {jogo}: {resultado}")
+            # Aguarda 25 minutos para verificar o resultado do 1º tempo
+    await asyncio.sleep(1500)
+    resultado = await verificar_gol_ht(jogo)
+
+    if resultado == "✅ BATEU":
+        resultado_final = "✅✅✅✅✅✅✅✅✅✅✅✅✅✅."
+    elif resultado == "❌ NÃO BATEU":
+        resultado_final = "❌❌❌❌❌❌❌❌❌❌❌❌❌❌."
+    else:
+        resultado_final = "⏳ Resultado do sinal: *Não foi possível localizar o jogo.*"
+
+    msg_editado = f"""{msg}
+
+{resultado_final}"""
+
+    # Edita a mesma mensagem com o resultado final
+    await bot.edit_message_text(
+        chat_id=CHAT_ID_DESTINO,
+        message_id=msg_enviada.message_id,
+        text=msg_editado,
+        parse_mode="Markdown"
+    )
         else:
             print("❌ Veredito não é 'ENTRAR'. Nenhum envio será feito.")
 
