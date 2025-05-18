@@ -121,7 +121,7 @@ async def analisar(texto):
             criterios.append("Posse dominante")
             pontos += 1
 
-               if pontos >= 8:
+        if pontos >= 8:
             veredito = "ENTRAR ✅"
             confianca = "Alta"
             conclusao = "100.00 responsabilidade."
