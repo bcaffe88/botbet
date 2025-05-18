@@ -32,7 +32,7 @@ async def monitorar_odd(jogo, link, timeout=300):
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as resp:
                     data = await resp.json()
-                    print("📥 Resposta da API de odds recebida")
+                    print("🗕️ Resposta da API de odds recebida")
                     if isinstance(data, dict):
                         print("❌ Dados de odds inválidos (esperado lista):", data)
                         return
@@ -47,16 +47,11 @@ async def monitorar_odd(jogo, link, timeout=300):
                                                 odd = linha["price"]
                                                 print(f"🔍 Odd encontrada: {odd} para jogo {nome}")
                                                 if odd >= 1.50:
-                                                    msg = f"⚽️ ENTRADA VALIDADA\n\n📌 Jogo: {nome}\n📈 Odd +0.5 HT: {odd}\n💰 Seguir Gestão "
-                                                    await bot.send_message(
-                                                        chat_id=CHAT_ID_DESTINO,
-                                                        text=msg,
-                                                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔥 Apostar agora", url=link)]]))
-                                                    return
+                                                    return odd
         except Exception as e:
             print("❌ Erro monitorando odd:", e)
         await asyncio.sleep(30)
-
+    return None
 
 # ANÁLISE
 async def analisar(texto):
@@ -136,9 +131,15 @@ async def analisar(texto):
 🤖 OVERBOT VIP:
 {chr(10).join(resumo)}
 
-📊 ODD: {odd}
+📋 ODD: {odd if odd else 'A definir'}
 Confiança: {confianca}
 DYOR: {conclusao}"""
+            await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
+        else:
+            print("❌ Veredito não é 'ENTRAR'. Nenhum envio será feito.")
+        
+        except Exception as e:
+            print("❌ Erro ao analisar:", e)
 
 # TELETHON
 client = TelegramClient("sessao_sinais", API_ID, API_HASH)
