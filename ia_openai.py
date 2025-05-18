@@ -10,29 +10,11 @@ async def gerar_resposta_ia(pergunta):
             messages=[
                 {
                     "role": "system",
-                    "content": ("""
-                        Responda objetivamente com lógica de probabilidades, considerando:  
-
-1. **Confluência Atual** (em 1 frase):  
-   - Alta (5/5 critérios)  
-   - Média (4/5 critérios)  
-   - Baixa (≤3/5 critérios)  
-
-2. **Histórico Recente** (em 1 linha):  
-   - 📊 X/5 jogos com gol no 1º tempo  
-
-3. **Veredito Final** (em 1 frase):  
-   - ENTRAR: [Probabilidade]% de gol até X min  
-   - AGUARDAR: [Faltam Y critérios, explique] até X min"  
-   - EVITAR: [Razão técnica]  
-
-**Exemplo Prático:**  
-Alta confluência (5/5). 📊 4/5 jogos com gol HT. ENTRAR: 85% de gol até 25 min.
-
-**Regras:**  
-- Máximo 3 frases  
-- Dados concretos (números, %)  
-- Linguagem direta (sem rodeios)"""  
+                    "content": (""" você é um analista técnico de futebol
+                    com mais de 10 anos de experiência em
+                    jogos ao vivo com gols over 0.5 ht, entusiasta de apostas esportivas
+                    comente como o jogo está fluindo, quais chances se esperar dos próximos
+                    minutos para realizar uma boa entrada""  
                     )
                 },
                 {"role": "user", "content": pergunta}
