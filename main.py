@@ -111,7 +111,7 @@ async def analisar(texto):
         if ia and ia >= 75:
             criterios.append("IA")
             pontos += 2
-        resumo.append(f"• IA: {ia} {'✓' if ia and ia >= 80 else '✗'}")
+        resumo.append(f"• IA: {ia}")
 
         if minuto and 16 <= minuto <= 22:
             criterios.append("Minuto ideal")
@@ -143,13 +143,13 @@ async def analisar(texto):
 
         if pontos >= 7:
             veredito = "ENTRAR ✅"
-            conclusao = "100.00."
+            conclusao = "OVER 0.5 HT."
 
-            msg = f"""⚽️ {veredito}
+            msg = f"""⚽️ {veredito} 
 🏟️ {jogo}
-🤖 OVERBOT VIP:
+🤖 OVERBOT VIP
 {chr(10).join(resumo)}
-Responsabilidade: {conclusao}"""
+▶ Entrar: {conclusao}"""
 
             msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
 
