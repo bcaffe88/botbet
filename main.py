@@ -30,11 +30,10 @@ def similaridade(a, b):
 # API-FOOTBALL - Verifica gol no HT
 async def verificar_gol_ht(nome_jogo):
     headers = {
-        "x-rapidapi-key": FOOTBALL_API_KEY,
-        "x-rapidapi-host": "api-football-v1.p.rapidapi.com"
+        "x-apisports-key": FOOTBALL_API_KEY
     }
     data_hoje = datetime.now().strftime("%Y-%m-%d")
-    url = f"https://api-football-v1.p.rapidapi.com/v3/fixtures?date={data_hoje}"
+    url = f"https://v3.football.api-sports.io/fixtures?date={data_hoje}"
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -60,7 +59,7 @@ async def verificar_gol_ht(nome_jogo):
         print("❌ Erro ao consultar API-Football:", e)
 
     return "⏳ NÃO LOCALIZADO"
-
+    
 # Comando /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Bot de sinais refinados ativo!")
