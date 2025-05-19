@@ -160,10 +160,10 @@ async def analisar(texto):
             conclusao = "OVER 0.5 HT."
 
             msg = f"""⚽️ {veredito} 
-{jogo}
+🏟 {jogo}
 🤖 OVERBOT VIP:
 {chr(10).join(resumo)}
-ENTRADA: {conclusao}"""
+▶ ENTRADA: {conclusao}"""
 
             msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
             asyncio.create_task(tarefa_veredito(jogo, msg_enviada))
