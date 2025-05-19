@@ -23,29 +23,29 @@ def normalizar(texto):
     return unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8').lower()
 
 # Verifica se houve gol no 1º tempo via Sofascore
-async def verificar_gol_ht(nome_jogo):
+from datetime import datetime
+
+async def verificar_gol_ht_fallback(nome_jogo):
     try:
+        hoje = datetime.now().strftime("%Y-%m-%d")
+        url = f"https://api.sofascore.com/api/v1/sport/football/events/{hoje}"
         async with aiohttp.ClientSession() as session:
-            async with session.get("https://api.sofascore.com/api/v1/sport/football/events/live") as resp:
+            async with session.get(url) as resp:
                 data = await resp.json()
                 eventos = data.get("events", [])
 
-                print("🧩 Jogos ao vivo encontrados:")
+                print(f"🔎 Verificando jogos do dia {hoje}")
                 for evento in eventos:
                     casa = evento["homeTeam"]["name"]
                     fora = evento["awayTeam"]["name"]
                     nome_match = f"{casa} x {fora}"
-                    print(f"- {nome_match}")
 
-                    # Verificação flexível com normalização
                     if normalizar(nome_jogo) in normalizar(nome_match):
                         gols_1t = evento.get("homeScore", {}).get("period1", 0) + evento.get("awayScore", {}).get("period1", 0)
                         print(f"🔍 Comparando: {nome_jogo} ≈ {nome_match} | Gols 1T: {gols_1t}")
                         return "✅ BATEU" if gols_1t >= 1 else "❌ NÃO BATEU"
-
-        print("⚠️ Jogo não encontrado nos ao vivo da Sofascore.")
     except Exception as e:
-        print("❌ Erro ao verificar Sofascore:", e)
+        print("❌ Erro ao verificar fallback Sofascore:", e)
 
     return "⏳ NÃO LOCALIZADO"
 
