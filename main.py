@@ -51,6 +51,30 @@ async def verificar_gol_ht(nome_jogo):
                     nome_match = f"{casa} x {fora}"
                     print(f"- {nome_match}")
 
+                   # Buscar dados da liga e identificar tendência OVER/UNDER
+        headers = {"x-apisports-key": FOOTBALL_API_KEY}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"https://v3.football.api-sports.io/fixtures?date={datetime.now().strftime('%Y-%m-%d')}", headers=headers) as resp:
+                data = await resp.json()
+                jogos = data.get("response", [])
+                nome_liga = "Liga desconhecida"
+                tendencia_liga = "Indefinido"
+
+                for item in jogos:
+                    teams = item["teams"]
+                    casa = teams["home"]["name"]
+                    fora = teams["away"]["name"]
+                    nome_match = f"{casa} x {fora}"
+                    if similaridade(normalizar(jogo), normalizar(nome_match)) > 0.75:
+                        nome_liga = item["league"]["name"]
+                        liga_id = item["league"]["id"]
+                        temporada = item["league"]["season"]
+
+                        # Média de gols por jogo na liga (últimos 10 jogos)
+                        media = media_gols_liga(liga_id, temporada)
+                        tendencia_liga = "Tendência OVER 1T" if media >= 1.2 else "Tendência UNDER 1T"
+                        break 
+
                     if similaridade(normalizar(nome_jogo), normalizar(nome_match)) > 0.75:
                         gols_ht = (halftime["home"] or 0) + (halftime["away"] or 0)
                         print(f"🔍 Comparando: {nome_jogo} ≈ {nome_match} | Gols HT: {gols_ht}")
@@ -66,7 +90,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Tarefa de veredito após 25 minutos
 async def tarefa_veredito(jogo, msg_original):
-    await asyncio.sleep(1500)
+    await asyncio.sleep(2100)
     resultado = await verificar_gol_ht(jogo)
 
     if resultado == "✅ BATEU":
@@ -154,13 +178,14 @@ async def analisar(texto):
         if posse[0] >= 60 or posse[1] >= 60:
             criterios.append("Posse dominante")
             pontos += 1
-
+            
         if pontos >= 7:
             veredito = "ENTRAR ✅"
             conclusao = "OVER 0.5 HT."
 
             msg = f"""⚽️ {veredito} 
 🏟 {jogo}
+🏆 Liga: {nome_liga} | {tendencia_liga}
 🤖 OVERBOT VIP:
 {chr(10).join(resumo)}
 ▶ ENTRADA: {conclusao}"""
