@@ -25,27 +25,51 @@ def normalizar(texto):
 # Verifica se houve gol no 1º tempo via Sofascore
 from datetime import datetime
 
-async def verificar_gol_ht_fallback(nome_jogo):
+async def verificar_gol_ht(nome_jogo):
     try:
-        hoje = datetime.now().strftime("%Y-%m-%d")
-        url = f"https://api.sofascore.com/api/v1/sport/football/events/{hoje}"
+        # 1. Tenta buscar nos jogos ao vivo
         async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
+            async with session.get("https://api.sofascore.com/api/v1/sport/football/events/live") as resp:
                 data = await resp.json()
                 eventos = data.get("events", [])
 
-                print(f"🔎 Verificando jogos do dia {hoje}")
+                print("🧩 Jogos AO VIVO encontrados:")
                 for evento in eventos:
                     casa = evento["homeTeam"]["name"]
                     fora = evento["awayTeam"]["name"]
                     nome_match = f"{casa} x {fora}"
+                    print(f"- {nome_match}")
 
                     if normalizar(nome_jogo) in normalizar(nome_match):
                         gols_1t = evento.get("homeScore", {}).get("period1", 0) + evento.get("awayScore", {}).get("period1", 0)
                         print(f"🔍 Comparando: {nome_jogo} ≈ {nome_match} | Gols 1T: {gols_1t}")
                         return "✅ BATEU" if gols_1t >= 1 else "❌ NÃO BATEU"
+
+        # 2. Se não encontrar, busca nos jogos do dia
+        print("🔄 Não encontrado ao vivo. Verificando jogos do dia (fallback)...")
+        hoje = datetime.now().strftime("%Y-%m-%d")
+        url_fallback = f"https://api.sofascore.com/api/v1/sport/football/events/{hoje}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url_fallback) as resp:
+                data = await resp.json()
+                eventos = data.get("events", [])
+
+                print(f"📅 Jogos do dia {hoje}:")
+                for evento in eventos:
+                    casa = evento["homeTeam"]["name"]
+                    fora = evento["awayTeam"]["name"]
+                    nome_match = f"{casa} x {fora}"
+                    print(f"- {nome_match}")
+
+                    if normalizar(nome_jogo) in normalizar(nome_match):
+                        gols_1t = evento.get("homeScore", {}).get("period1", 0) + evento.get("awayScore", {}).get("period1", 0)
+                        print(f"🔍 Comparando (fallback): {nome_jogo} ≈ {nome_match} | Gols 1T: {gols_1t}")
+                        return "✅ BATEU" if gols_1t >= 1 else "❌ NÃO BATEU"
+
+        print("⚠️ Jogo não localizado ao vivo nem nos jogos do dia.")
+
     except Exception as e:
-        print("❌ Erro ao verificar fallback Sofascore:", e)
+        print("❌ Erro ao verificar Sofascore (com fallback):", e)
 
     return "⏳ NÃO LOCALIZADO"
 
