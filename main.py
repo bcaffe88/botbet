@@ -4,6 +4,10 @@ from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
 import os, re, asyncio, aiohttp, time, unicodedata
+from difflib import SequenceMatcher
+
+def similaridade(a, b):
+    return SequenceMatcher(None, a, b).ratio()
 
 # Configurações
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -40,12 +44,12 @@ async def verificar_gol_ht(nome_jogo):
                     nome_match = f"{casa} x {fora}"
                     print(f"- {nome_match}")
 
-                    if normalizar(nome_jogo) in normalizar(nome_match):
+                    if similaridade(normalizar(nome_jogo), normalizar(nome_match)) > 0.75:
                         gols_1t = evento.get("homeScore", {}).get("period1", 0) + evento.get("awayScore", {}).get("period1", 0)
-                        print(f"🔍 Comparando: {nome_jogo} ≈ {nome_match} | Gols 1T: {gols_1t}")
+                        print(f"🔍 Comparando (LIVE): {nome_jogo} ≈ {nome_match} | Gols 1T: {gols_1t}")
                         return "✅ BATEU" if gols_1t >= 1 else "❌ NÃO BATEU"
 
-        # 2. Se não encontrar, busca nos jogos do dia
+        # 2. Fallback: jogos do dia
         print("🔄 Não encontrado ao vivo. Verificando jogos do dia (fallback)...")
         hoje = datetime.now().strftime("%Y-%m-%d")
         url_fallback = f"https://api.sofascore.com/api/v1/sport/football/events/{hoje}"
@@ -61,9 +65,9 @@ async def verificar_gol_ht(nome_jogo):
                     nome_match = f"{casa} x {fora}"
                     print(f"- {nome_match}")
 
-                    if normalizar(nome_jogo) in normalizar(nome_match):
+                    if similaridade(normalizar(nome_jogo), normalizar(nome_match)) > 0.75:
                         gols_1t = evento.get("homeScore", {}).get("period1", 0) + evento.get("awayScore", {}).get("period1", 0)
-                        print(f"🔍 Comparando (fallback): {nome_jogo} ≈ {nome_match} | Gols 1T: {gols_1t}")
+                        print(f"🔍 Comparando (FALLBACK): {nome_jogo} ≈ {nome_match} | Gols 1T: {gols_1t}")
                         return "✅ BATEU" if gols_1t >= 1 else "❌ NÃO BATEU"
 
         print("⚠️ Jogo não localizado ao vivo nem nos jogos do dia.")
