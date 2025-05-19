@@ -119,16 +119,13 @@ async def analisar(texto):
 
         if pontos >= 7:
             veredito = "ENTRAR ✅"
-            confianca = "Alta"
-            conclusao = "100.00 responsabilidade."
+            conclusao = "100.00."
 
-            msg = f"""⚽️ {veredito} {jogo}
-
+            msg = f"""⚽️ {veredito}
+🏟️ {jogo}
 🤖 OVERBOT VIP:
 {chr(10).join(resumo)}
-
-Confiança: {confianca}
-DYOR: {conclusao}"""
+Responsabilidade: {conclusao}"""
 
             msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
 
@@ -137,9 +134,9 @@ DYOR: {conclusao}"""
             resultado = await verificar_gol_ht(jogo)
 
             if resultado == "✅ BATEU":
-                resultado_final = "🚀 Resultado do sinal: ✅ *BATEU* no 1º tempo!"
+                resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅."
             elif resultado == "❌ NÃO BATEU":
-                resultado_final = "⚠️ Resultado do sinal: ❌ *NÃO BATEU* no 1º tempo."
+                resultado_final = "R E D ❌."
             else:
                 resultado_final = "⏳ Resultado do sinal: *Não foi possível localizar o jogo.*"
 
