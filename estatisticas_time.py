@@ -51,9 +51,43 @@ def confrontos_diretos(team1_id, team2_id):
         for jogo in jogos:
             casa = jogo['teams']['home']['name']
             fora = jogo['teams']['away']['name']
-            placar = jogo['score']['fulltime']
+            placar = jogo['score']['halftime']
             resultados.append(f"{casa} {placar['home']}x{placar['away']} {fora}")
         return resultados
     except Exception as e:
         print(f"❌ Erro confrontos diretos: {e}")
         return []
+
+def resumo_estatistico(nome_mandante, nome_visitante, league_id=71, season=2024):
+    try:
+        team1_id = buscar_team_id(nome_mandante)
+        team2_id = buscar_team_id(nome_visitante)
+
+        texto_resumo = []
+
+        # Gols 1T nos últimos 5 jogos
+        if team1_id:
+            gols_mandante = gols_primeiro_tempo(team1_id)
+            texto_resumo.append(f"🏠 {nome_mandante}: {gols_mandante}/5 jogos com gol no 1T")
+
+        if team2_id:
+            gols_visitante = gols_primeiro_tempo(team2_id)
+            texto_resumo.append(f"🚶 {nome_visitante}: {gols_visitante}/5 jogos com gol no 1T")
+
+        # Confrontos diretos com gol no 1T
+        if team1_id and team2_id:
+            confrontos = confrontos_diretos(team1_id, team2_id)
+            gols_confronto_1t = sum(
+                1 for c in confrontos if "x" in c and int(c.split("x")[0].split()[-1]) + int(c.split("x")[1].split()[0]) > 0
+            )
+            texto_resumo.append(f"⚔️ Confrontos diretos: {gols_confronto_1t}/5 com gol no 1T")
+
+        # Média de gols da liga
+        media = media_gols_liga(league_id, season)
+        texto_resumo.append(f"📊 Média de gols da liga: {media}")
+
+        return "\n".join(texto_resumo)
+
+    except Exception as e:
+        print(f"❌ Erro ao gerar resumo estatístico: {e}")
+        return "⚠️ Histórico indisponível"
