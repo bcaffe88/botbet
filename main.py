@@ -34,7 +34,6 @@ async def verificar_gol_ht(nome_jogo):
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
     data_hoje = datetime.now().strftime("%Y-%m-%d")
     url = f"https://v3.football.api-sports.io/fixtures?date={data_hoje}"
-
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as resp:
@@ -73,16 +72,27 @@ async def analisar(texto):
     tendencia_liga = "Tendência desconhecida"
 
     try:
-        jogo = re.search(r'⚽️\s*(.+)', texto).group(1).strip()
-        minuto = int(re.search(r"⏰\s*(\d+)", texto).group(1))
-        ia = float(re.search(r"OVER 0\\.5 HT:\s*([\d.]+)%", texto).group(1))
+        jogo_match = re.search(r'⚽️\s*(.+)', texto)
+        if not jogo_match:
+            print("❌ Jogo não identificado no texto")
+            return
+        jogo = jogo_match.group(1).strip()
 
-        perigosos = list(map(int, re.findall(r"Ataques Perigosos:\s*(\d+)/(\d+)", texto)[0]))
-        posse = list(map(int, re.findall(r"Posse de Bola:\s*(\d+)/(\d+)", texto)[0]))
-        escanteios = list(map(int, re.findall(r"Escanteios:\s*(\d+)/(\d+)", texto)[0]))
-        no_gol = list(map(int, re.findall(r"No Gol:\s*(\d+)/(\d+)", texto)[0]))
-        chutes = list(map(int, re.findall(r"Total:\s*(\d+)/(\d+)", texto)[0]))
-        vento = float(re.search(r"🌬️\s*([\d.]+)\s*m/s", texto).group(1))
+        minuto_match = re.search(r"⏰\s*(\d+)", texto)
+        ia_match = re.search(r"OVER 0\\.5 HT:\s*([\d.]+)%", texto)
+        if not minuto_match or not ia_match:
+            print("❌ Minuto ou IA não encontrados")
+            return
+
+        minuto = int(minuto_match.group(1))
+        ia = float(ia_match.group(1))
+
+        perigosos = list(map(int, re.findall(r"Ataques Perigosos:\s*(\d+)/(\d+)", texto)[0])) if re.findall(r"Ataques Perigosos:\s*(\d+)/(\d+)", texto) else [0, 0]
+        posse = list(map(int, re.findall(r"Posse de Bola:\s*(\d+)/(\d+)", texto)[0])) if re.findall(r"Posse de Bola:\s*(\d+)/(\d+)", texto) else [0, 0]
+        escanteios = list(map(int, re.findall(r"Escanteios:\s*(\d+)/(\d+)", texto)[0])) if re.findall(r"Escanteios:\s*(\d+)/(\d+)", texto) else [0, 0]
+        no_gol = list(map(int, re.findall(r"No Gol:\s*(\d+)/(\d+)", texto)[0])) if re.findall(r"No Gol:\s*(\d+)/(\d+)", texto) else [0, 0]
+        chutes = list(map(int, re.findall(r"Total:\s*(\d+)/(\d+)", texto)[0])) if re.findall(r"Total:\s*(\d+)/(\d+)", texto) else [0, 0]
+        vento = float(re.search(r"🌬️\s*([\d.]+)\s*m/s", texto).group(1)) if re.search(r"🌬️\s*([\d.]+)\s*m/s", texto) else None
 
         criterios, resumo = [], []
         pontos = 0
@@ -96,14 +106,13 @@ async def analisar(texto):
         if sum(perigosos) >= 10 and abs(perigosos[0] - perigosos[1]) >= 7: pontos += 2
         if sum(no_gol) >= 1: pontos += 2
         if sum(escanteios) >= 2: pontos += 1
-        if vento < 15: pontos += 1
+        if vento and vento < 15: pontos += 1
         if sum(chutes) >= 4: pontos += 1
         if posse[0] >= 60 or posse[1] >= 60: pontos += 1
 
         _, pontos_extra = await verificar_gol_ht(jogo)
         pontos += pontos_extra
 
-        # IDENTIFICAR LIGA E TENDÊNCIA
         headers = {"x-apisports-key": FOOTBALL_API_KEY}
         async with aiohttp.ClientSession() as session:
             async with session.get(f"https://v3.football.api-sports.io/fixtures?date={datetime.now().strftime('%Y-%m-%d')}", headers=headers) as resp:
@@ -128,7 +137,6 @@ async def analisar(texto):
             veredito = "ENTRAR ✅"
             confianca = "Alta"
             conclusao = "100.00 responsabilidade."
-
             msg = f"""⚽️ {veredito} {jogo}
 
 🤖 OVERBOT VIP:
@@ -137,7 +145,6 @@ async def analisar(texto):
 Confiança: {confianca}
 🏆 Liga: {nome_liga} | {tendencia_liga}
 DYOR: {conclusao}"""
-
             msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
             await asyncio.sleep(1500)
             resultado_final, _ = await verificar_gol_ht(jogo)
@@ -149,11 +156,9 @@ DYOR: {conclusao}"""
     except Exception as e:
         print("❌ Erro ao analisar:", e)
 
-# START
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Bot de sinais ativo!")
 
-# TELETHON ESCUTA
 client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 
 @client.on(events.NewMessage())
@@ -161,7 +166,6 @@ async def escutar(event):
     if str(event.chat_id) == str(CHAT_ID_SINAL) and "OVER 0.5 HT" in event.message.message:
         await analisar(event.message.message)
 
-# RUN
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
