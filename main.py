@@ -85,46 +85,118 @@ async def tarefa_veredito(jogo, msg_original):
     await bot.edit_message_text(chat_id=CHAT_ID_DESTINO, message_id=msg_original.message_id, text=novo_texto, parse_mode="Markdown")
 
 # Análise do sinal
+# Análise do sinal com logs detalhados
 async def analisar(texto):
     try:
-        jogo = re.search(r'⚽️\s*(.+)', texto).group(1).strip()
-        minuto = int(re.search(r"⏰\s*(\d+)", texto).group(1))
-        ia = float(re.search(r"OVER 0\\.5 HT:\\s*([\\d.]+)%", texto).group(1))
-        perigosos = list(map(int, re.findall(r"Ataques Perigosos:\\s*(\\d+)/(\\d+)", texto)[0]))
-        posse = list(map(int, re.findall(r"Posse de Bola:\\s*(\\d+)/(\\d+)", texto)[0]))
-        escanteios = list(map(int, re.findall(r"Escanteios:\\s*(\\d+)/(\\d+)", texto)[0]))
-        no_gol = list(map(int, re.findall(r"No Gol:\\s*(\\d+)/(\\d+)", texto)[0]))
-        chutes = list(map(int, re.findall(r"Total:\\s*(\\d+)/(\\d+)", texto)[0]))
-        vento = float(re.search(r"🌬️\\s*([\\d.]+)\\s*m/s", texto).group(1))
+        print("📊 Iniciando análise do sinal")
+
+        # Extração segura
+        match_jogo = re.search(r'⚽️\s*(.+)', texto)
+        jogo = match_jogo.group(1).strip() if match_jogo else None
+        if not jogo:
+            print("❌ Jogo não identificado.")
+            return
+
+        match_minuto = re.search(r"⏰\s*(\d+)", texto)
+        minuto = int(match_minuto.group(1)) if match_minuto else None
+
+        match_ia = re.search(r"OVER 0\\.5 HT:\\s*([\\d.]+)%", texto)
+        ia = float(match_ia.group(1)) if match_ia else None
+
+        perigosos = list(map(int, re.findall(r"Ataques Perigosos:\s*(\d+)/(\d+)", texto)[0])) if re.findall(r"Ataques Perigosos:\s*(\d+)/(\d+)", texto) else [0, 0]
+        posse = list(map(int, re.findall(r"Posse de Bola:\s*(\d+)/(\d+)", texto)[0])) if re.findall(r"Posse de Bola:\s*(\d+)/(\d+)", texto) else [0, 0]
+        escanteios = list(map(int, re.findall(r"Escanteios:\s*(\d+)/(\d+)", texto)[0])) if re.findall(r"Escanteios:\s*(\d+)/(\d+)", texto) else [0, 0]
+        no_gol = list(map(int, re.findall(r"No Gol:\s*(\d+)/(\d+)", texto)[0])) if re.findall(r"No Gol:\s*(\d+)/(\d+)", texto) else [0, 0]
+        chutes = list(map(int, re.findall(r"Total:\s*(\d+)/(\d+)", texto)[0])) if re.findall(r"Total:\s*(\d+)/(\d+)", texto) else [0, 0]
+        match_vento = re.search(r"🌬️\s*([\d.]+)\s*m/s", texto)
+        vento = float(match_vento.group(1)) if match_vento else None
 
         criterios, resumo = [], []
         pontos = 0
-        if ia >= 75: pontos += 2; criterios.append("IA"); resumo.append(f"• IA: {ia}%")
-        if 16 <= minuto <= 22: pontos += 1
-        if sum(perigosos) >= 10 and abs(perigosos[0] - perigosos[1]) >= 7: pontos += 2
-        if sum(no_gol) >= 1: pontos += 2
-        if sum(escanteios) >= 2: pontos += 1
-        if vento < 15: pontos += 1
-        if sum(chutes) >= 4: pontos += 1
-        if posse[0] >= 60 or posse[1] >= 60: pontos += 1
 
-        # Pontuação adicional baseada em estatísticas históricas
+        if ia and ia >= 75:
+            pontos += 2
+            criterios.append("IA")
+            resumo.append(f"• IA: {ia}%")
+            print("✅ IA alta - +2")
+        else:
+            print("❌ IA insuficiente")
+
+        if minuto and 16 <= minuto <= 22:
+            pontos += 1
+            criterios.append("Minuto ideal")
+            print("✅ Minuto ideal - +1")
+        else:
+            print(f"❌ Minuto fora da janela (valor: {minuto})")
+
+        if sum(perigosos) >= 10 and abs(perigosos[0] - perigosos[1]) >= 7:
+            pontos += 2
+            criterios.append("Ataques perigosos")
+            print(f"✅ Ataques perigosos: {perigosos} - +2")
+        else:
+            print(f"❌ Ataques perigosos insuficientes: {perigosos}")
+
+        if sum(no_gol) >= 1:
+            pontos += 2
+            criterios.append("Finalizações no gol")
+            print(f"✅ Finalizações no gol: {no_gol} - +2")
+        else:
+            print(f"❌ Nenhuma finalização no gol: {no_gol}")
+
+        if sum(escanteios) >= 2:
+            pontos += 1
+            criterios.append("Escanteios")
+            print(f"✅ Escanteios suficientes: {escanteios} - +1")
+        else:
+            print(f"❌ Escanteios insuficientes: {escanteios}")
+
+        if vento and vento < 15:
+            pontos += 1
+            criterios.append("Vento ideal")
+            print(f"✅ Vento ideal: {vento} m/s - +1")
+        else:
+            print(f"⚠️ Vento alto ou não informado: {vento}")
+
+        if sum(chutes) >= 4:
+            pontos += 1
+            criterios.append("Chutes totais")
+            print(f"✅ Chutes totais: {chutes} - +1")
+        else:
+            print(f"❌ Chutes insuficientes: {chutes}")
+
+        if posse[0] >= 60 or posse[1] >= 60:
+            pontos += 1
+            criterios.append("Posse dominante")
+            print(f"✅ Posse dominante: {posse} - +1")
+        else:
+            print(f"❌ Posse não dominante: {posse}")
+
+        print(f"🧮 Pontuação parcial: {pontos} pontos")
+
+        # Pontuação histórica adicional
         try:
             nome_mandante, nome_visitante = jogo.split(" x ")
             pontos_hist = await pontuacao_estatistica_histórica(nome_mandante, nome_visitante)
             pontos += pontos_hist
-            print(f"📊 Pontos extras por histórico: {pontos_hist}")
+            print(f"🧠 Pontos históricos: +{pontos_hist}")
         except Exception as e:
             print(f"⚠️ Erro ao calcular pontos históricos: {e}")
+
+        print(f"🔚 Pontuação final: {pontos} pontos")
 
         if pontos >= 9:
             veredito = "ENTRAR ✅"
             conclusao = "OVER 0.5 HT."
-            msg = f"""⚽️ {veredito} \n🏟 {jogo}\n🤖 OVERBOT VIP:\n{chr(10).join(resumo)}\n▶ ENTRADA: {conclusao}"""
+            msg = f"""⚽️ {veredito} 
+🏟 {jogo}
+🤖 OVERBOT VIP:
+{chr(10).join(resumo)}
+▶ ENTRADA: {conclusao}"""
             msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
             asyncio.create_task(tarefa_veredito(jogo, msg_enviada))
         else:
             print("❌ Veredito não é 'ENTRAR'. Nenhum envio será feito.")
+
     except Exception as e:
         print("❌ Erro ao analisar:", e)
 
