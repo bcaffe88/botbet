@@ -10,8 +10,6 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
 import aiohttp
 
-from estatisticas_time import resumo_estatistico
-
 # CONFIGURAÇÕES
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_ID = int(os.getenv("API_ID"))
@@ -159,20 +157,13 @@ async def analisar(texto):
 
         if pontos >= 7:
             veredito = "ENTRAR ✅"
-            conclusao = "OVER 0.5 HT."  
-     try:
-         nome_mandante, nome_visitante = jogo.split(" x ")
-         historico = resumo_estatistico(nome_mandante.strip(), nome_visitante.strip())
-    except Exception as e:
-            print("❌ Erro ao gerar histórico:", e)
-            historico = "⚠️ Histórico indisponível"
-        msg = f"""⚽️ {veredito} 
+            conclusao = "OVER 0.5 HT."
+
+            msg = f"""⚽️ {veredito} 
 🏟 {jogo}
 🤖 OVERBOT VIP:
 {chr(10).join(resumo)}
-▶ ENTRADA: {conclusao}
-📊 Histórico:
-{historico}"""
+▶ ENTRADA: {conclusao}"""
 
             msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
             asyncio.create_task(tarefa_veredito(jogo, msg_enviada))
