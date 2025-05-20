@@ -72,9 +72,10 @@ async def analisar(texto):
     tendencia_liga = "Tendência desconhecida"
 
     try:
+        print("📝 Texto recebido:\n", texto)
         jogo_match = re.search(r'⚽️\s*(.+)', texto)
         minuto_match = re.search(r"⏰\s*(\d+)", texto)
-        ia_match = re.search(r"OVER 0\\.5 HT:\s*([\d.]+)%", texto)
+        ia_match = re.search(r"OVER 0\\.5 HT[:\s]*([\d.]+)%", texto)
 
         if not jogo_match or not minuto_match or not ia_match:
             print("❌ Jogo, Minuto ou IA não encontrados")
