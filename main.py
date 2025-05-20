@@ -114,6 +114,8 @@ async def tarefa_veredito(jogo, msg_original):
 # Análise do sinal
 async def analisar(texto):
     print("📊 Iniciando análise do sinal")
+        nome_liga = "Liga não identificada"
+    tendencia_liga = "Tendência desconhecida"
     try:
         jogo = re.search(r'⚽️\s*(.+)', texto)
         jogo = jogo.group(1).strip() if jogo else "Times não identificados"
