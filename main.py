@@ -5,8 +5,8 @@ import asyncio
 from datetime import datetime
 from difflib import SequenceMatcher
 
-from telegram import Bot
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, Update
+from telegram import Bot, Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
 import aiohttp
 
