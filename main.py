@@ -73,17 +73,14 @@ async def analisar(texto):
 
     try:
         jogo_match = re.search(r'⚽️\s*(.+)', texto)
-        if not jogo_match:
-            print("❌ Jogo não identificado no texto")
-            return
-        jogo = jogo_match.group(1).strip()
-
         minuto_match = re.search(r"⏰\s*(\d+)", texto)
         ia_match = re.search(r"OVER 0\\.5 HT:\s*([\d.]+)%", texto)
-        if not minuto_match or not ia_match:
-            print("❌ Minuto ou IA não encontrados")
+
+        if not jogo_match or not minuto_match or not ia_match:
+            print("❌ Jogo, Minuto ou IA não encontrados")
             return
 
+        jogo = jogo_match.group(1).strip()
         minuto = int(minuto_match.group(1))
         ia = float(ia_match.group(1))
 
