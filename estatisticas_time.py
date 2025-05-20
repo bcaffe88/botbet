@@ -36,6 +36,9 @@ def media_gols_liga(league_id, season):
     try:
         response = requests.get(url, headers=HEADERS)
         jogos = response.json()['response']
+        if not jogos:
+            print(f"⚠️ Nenhum jogo encontrado para liga {league_id} - temporada {season}")
+            return 0
         total = sum(j['goals']['home'] + j['goals']['away'] for j in jogos)
         return round(total / len(jogos), 2)
     except Exception as e:
@@ -65,7 +68,6 @@ def resumo_estatistico(nome_mandante, nome_visitante, league_id=71, season=2024)
 
         texto_resumo = []
 
-        # Gols 1T nos últimos 5 jogos
         if team1_id:
             gols_mandante = gols_primeiro_tempo(team1_id)
             texto_resumo.append(f"🏠 {nome_mandante}: {gols_mandante}/5 jogos com gol no 1T")
@@ -74,7 +76,6 @@ def resumo_estatistico(nome_mandante, nome_visitante, league_id=71, season=2024)
             gols_visitante = gols_primeiro_tempo(team2_id)
             texto_resumo.append(f"🚶 {nome_visitante}: {gols_visitante}/5 jogos com gol no 1T")
 
-        # Confrontos diretos com gol no 1T
         if team1_id and team2_id:
             confrontos = confrontos_diretos(team1_id, team2_id)
             gols_confronto_1t = sum(
@@ -82,7 +83,6 @@ def resumo_estatistico(nome_mandante, nome_visitante, league_id=71, season=2024)
             )
             texto_resumo.append(f"⚔️ Confrontos diretos: {gols_confronto_1t}/5 com gol no 1T")
 
-        # Média de gols da liga
         media = media_gols_liga(league_id, season)
         texto_resumo.append(f"📊 Média de gols da liga: {media}")
 
