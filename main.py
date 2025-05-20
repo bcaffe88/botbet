@@ -93,24 +93,24 @@ async def tarefa_veredito(jogo, msg_original):
 async def analisar(texto):
     print("📊 Iniciando análise do sinal")
     try:
-    jogo_match = re.search(r'⚽️\s*(.+)', texto)
-    jogo = jogo_match.group(1).strip() if jogo_match else "Times não identificados"
-    print(f"📌 Jogo detectado: {jogo}")
+        jogo_match = re.search(r'⚽️\s*(.+)', texto)
+        jogo = jogo_match.group(1).strip() if jogo_match else "Times não identificados"
+        print(f"📌 Jogo detectado: {jogo}")
 
-    try:
-        nome_mandante, nome_visitante = jogo.split(" x ")
-        historico = resumo_estatistico(nome_mandante.strip(), nome_visitante.strip())
-        liga_info = resumo_estendido(nome_mandante.strip())
+        try:
+            nome_mandante, nome_visitante = jogo.split(" x ")
+            historico = resumo_estatistico(nome_mandante.strip(), nome_visitante.strip())
+            liga_info = resumo_estendido(nome_mandante.strip())
+        except Exception as e:
+            print(f"⚠️ Erro ao gerar histórico: {e}")
+            historico = "⚠️ Histórico indisponível"
+            liga_info = "⚠️ Info da liga indisponível"
+
     except Exception as e:
-        print(f"⚠️ Erro ao gerar histórico: {e}")
+        print("❌ Erro ao extrair dados do jogo:", e)
+        jogo = "Times não identificados"
         historico = "⚠️ Histórico indisponível"
         liga_info = "⚠️ Info da liga indisponível"
-
-except Exception as e:
-    print("❌ Erro ao extrair dados do jogo:", e)
-    jogo = "Times não identificados"
-    historico = "⚠️ Histórico indisponível"
-    liga_info = "⚠️ Info da liga indisponível"
 
     
         minuto_match = re.search(r"⏰\s*(\d+)", texto)
