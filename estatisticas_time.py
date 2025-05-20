@@ -61,7 +61,20 @@ def confrontos_diretos(team1_id, team2_id):
         print(f"❌ Erro confrontos diretos: {e}")
         return []
 
-def resumo_estatistico(nome_mandante, nome_visitante, league_id=71, season=2024):
+def buscar_liga_time(team_id):
+    url = f"{BASE_URL}/fixtures?team={team_id}&last=1"
+    try:
+        response = requests.get(url, headers=HEADERS)
+        jogos = response.json()['response']
+        if jogos:
+            liga_id = jogos[0]['league']['id']
+            temporada = jogos[0]['league']['season']
+            return liga_id, temporada
+    except Exception as e:
+        print(f"❌ Erro ao buscar liga do time {team_id}: {e}")
+    return None, None
+
+def resumo_estatistico(nome_mandante, nome_visitante):
     try:
         team1_id = buscar_team_id(nome_mandante)
         team2_id = buscar_team_id(nome_visitante)
@@ -83,8 +96,12 @@ def resumo_estatistico(nome_mandante, nome_visitante, league_id=71, season=2024)
             )
             texto_resumo.append(f"⚔️ Confrontos diretos: {gols_confronto_1t}/5 com gol no 1T")
 
-        media = media_gols_liga(league_id, season)
-        texto_resumo.append(f"📊 Média de gols da liga: {media}")
+        liga_id, temporada = buscar_liga_time(team1_id)
+        if liga_id and temporada:
+            media = media_gols_liga(liga_id, temporada)
+            texto_resumo.append(f"📊 Média de gols da liga: {media}")
+        else:
+            texto_resumo.append("📊 Média de gols da liga: indisponível")
 
         return "\n".join(texto_resumo)
 
