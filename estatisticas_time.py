@@ -108,3 +108,34 @@ def resumo_estatistico(nome_mandante, nome_visitante):
     except Exception as e:
         print(f"❌ Erro ao gerar resumo estatístico: {e}")
         return "⚠️ Histórico indisponível"
+
+def resumo_estendido(nome_time):
+    try:
+        team_id = buscar_team_id(nome_time)
+        if not team_id:
+            return "⚠️ Liga do time não identificada"
+
+        url = f"{BASE_URL}/fixtures?team={team_id}&last=1"
+        response = requests.get(url, headers=HEADERS)
+        data = response.json()['response']
+        if not data:
+            return "⚠️ Sem dados recentes do time"
+
+        jogo = data[0]
+        liga = jogo['league']
+        league_id = liga['id']
+        nome_liga = liga['name']
+        pais = liga['country']
+        temporada = liga['season']
+
+        media = media_gols_liga(league_id, temporada)
+        interpretacao = "🔥 Liga com tendência OVER" if media >= 2.2 else "⚠️ Liga tende ao UNDER"
+
+        return (
+            f"🏆 {nome_liga} ({pais})\n"
+            f"{interpretacao}"
+        )
+
+    except Exception as e:
+        print(f"❌ Erro no resumo estendido: {e}")
+        return "⚠️ Não foi possível obter info da liga"
