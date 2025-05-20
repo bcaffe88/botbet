@@ -159,16 +159,14 @@ async def analisar(texto):
 
         if pontos >= 7:
             veredito = "ENTRAR ✅"
-            conclusao = "OVER 0.5 HT."
-            
+            conclusao = "OVER 0.5 HT."  
      try:
-            nome_mandante, nome_visitante = jogo.split(" x ")
-            historico = resumo_estatistico(nome_mandante.strip(), nome_visitante.strip())
-        except Exception as e:
+         nome_mandante, nome_visitante = jogo.split(" x ")
+         historico = resumo_estatistico(nome_mandante.strip(), nome_visitante.strip())
+    except Exception as e:
             print("❌ Erro ao gerar histórico:", e)
             historico = "⚠️ Histórico indisponível"
-
-            msg = f"""⚽️ {veredito} 
+        msg = f"""⚽️ {veredito} 
 🏟 {jogo}
 🤖 OVERBOT VIP:
 {chr(10).join(resumo)}
