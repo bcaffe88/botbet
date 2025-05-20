@@ -10,8 +10,6 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
 import aiohttp
 
-from estatisticas_time import resumo_estatistico, resumo_estendido
-
 # CONFIGURAÇÕES
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_ID = int(os.getenv("API_ID"))
@@ -93,26 +91,10 @@ async def tarefa_veredito(jogo, msg_original):
 async def analisar(texto):
     print("📊 Iniciando análise do sinal")
     try:
-        jogo_match = re.search(r'⚽️\s*(.+)', texto)
-        jogo = jogo_match.group(1).strip() if jogo_match else "Times não identificados"
+        jogo = re.search(r'⚽️\s*(.+)', texto)
+        jogo = jogo.group(1).strip() if jogo else "Times não identificados"
         print(f"📌 Jogo detectado: {jogo}")
 
-        try:
-            nome_mandante, nome_visitante = jogo.split(" x ")
-            historico = resumo_estatistico(nome_mandante.strip(), nome_visitante.strip())
-            liga_info = resumo_estendido(nome_mandante.strip())
-        except Exception as e:
-            print(f"⚠️ Erro ao gerar histórico: {e}")
-            historico = "⚠️ Histórico indisponível"
-            liga_info = "⚠️ Info da liga indisponível"
-
-    except Exception as e:
-        print("❌ Erro ao extrair dados do jogo:", e)
-        jogo = "Times não identificados"
-        historico = "⚠️ Histórico indisponível"
-        liga_info = "⚠️ Info da liga indisponível"
-
-    
         minuto_match = re.search(r"⏰\s*(\d+)", texto)
         minuto = int(minuto_match.group(1)) if minuto_match else None
 
@@ -181,12 +163,7 @@ async def analisar(texto):
 🏟 {jogo}
 🤖 OVERBOT VIP:
 {chr(10).join(resumo)}
-{liga_info}
-▶ ENTRADA: {conclusao}
-📊 Histórico:
-{historico}
-
-"""
+▶ ENTRADA: {conclusao}"""
 
             msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
             asyncio.create_task(tarefa_veredito(jogo, msg_enviada))
