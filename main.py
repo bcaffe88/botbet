@@ -93,7 +93,7 @@ async def analisar(texto):
             print("❌ Erro ao gerar histórico:", e)
             historico = "⚠️ Histórico indisponível"
 
-        if pontos >= 9:
+        if pontos >= 7:
             veredito = "ENTRAR ✅"
             conclusao = "OVER 0.5 HT."
             msg = f"""⚽️ {veredito} 
