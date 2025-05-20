@@ -95,7 +95,6 @@ async def analisar(texto):
     try:
         jogo = re.search(r'⚽️\s*(.+)', texto)
         jogo = jogo.group(1).strip() if jogo else "Times não identificados"
-        print(f"📌 Jogo detectado: {jogo}")
     try:
     nome_mandante, nome_visitante = jogo.split(" x ")
     historico = resumo_estatistico(nome_mandante.strip(), nome_visitante.strip())
@@ -105,7 +104,8 @@ except Exception as e:
     historico = "⚠️ Histórico indisponível"
     liga_info = "⚠️ Info da liga indisponível"
 
-
+        print(f"📌 Jogo detectado: {jogo}")
+    
         minuto_match = re.search(r"⏰\s*(\d+)", texto)
         minuto = int(minuto_match.group(1)) if minuto_match else None
 
