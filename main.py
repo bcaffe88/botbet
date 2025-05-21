@@ -178,12 +178,12 @@ client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 
 @client.on(events.NewMessage())
 async def escutar(event):
-    print(f"📨 Mensagem recebida de {event.chat_id}:")
+    print(f"📨 Mensagem recebida de {event.chat_id}")
     print(event.message.message)
 
     if str(event.chat_id) == str(CHAT_ID_SINAL) and "OVER 0.5 HT" in event.message.message:
-        print("✅ Sinal detectado, agendando análise paralela.")
-       asyncio.create_task(analisar(event.message.message))
+        print("✅ Sinal detectado. Análise agendada.")
+        asyncio.create_task(analisar(event.message.message))
     else:
         print("⚠️ Mensagem ignorada.")
 
