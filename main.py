@@ -183,7 +183,7 @@ async def escutar(event):
 
     if str(event.chat_id) == str(CHAT_ID_SINAL) and "OVER 0.5 HT" in event.message.message:
         print("✅ Sinal detectado, agendando análise paralela.")
-        asycio.create_task(analisar((event.message.message))
+        asyncio.create_task(analisar((event.message.message))
     else:
         print("⚠️ Mensagem ignorada.")
 
