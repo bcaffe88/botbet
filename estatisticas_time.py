@@ -113,13 +113,13 @@ def resumo_estendido(nome_time):
     try:
         team_id = buscar_team_id(nome_time)
         if not team_id:
-            return "⚠️ Liga do time não identificada"
+            return f"⚠️ Time não encontrado: {nome_time}"
 
         url = f"{BASE_URL}/fixtures?team={team_id}&last=1"
         response = requests.get(url, headers=HEADERS)
         data = response.json()['response']
         if not data:
-            return "⚠️ Sem dados recentes do time"
+            return f"⚠️ Sem jogos recentes para: {nome_time}"
 
         jogo = data[0]
         liga = jogo['league']
@@ -132,10 +132,11 @@ def resumo_estendido(nome_time):
         interpretacao = "🔥 Liga com tendência OVER" if media >= 2.2 else "⚠️ Liga tende ao UNDER"
 
         return (
-            f"🏆 {nome_liga} ({pais})\n"
+            f"🏆 {nome_liga} ({pais}) – Temporada {temporada}\n"
+            f"📊 Média de gols: {media}\n"
             f"{interpretacao}"
         )
 
     except Exception as e:
         print(f"❌ Erro no resumo estendido: {e}")
-        return "⚠️ Não foi possível obter info da liga"
+        return f"⚠️ Erro ao buscar info da liga de {nome_time}"
