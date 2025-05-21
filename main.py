@@ -66,7 +66,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Tarefa de veredito após 25 minutos
 async def tarefa_veredito(jogo, msg_original):
-    await asyncio.sleep(1500)
+    await asyncio.sleep(2100)
     resultado = await verificar_gol_ht(jogo)
 
     if resultado == "✅ BATEU":
