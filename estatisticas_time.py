@@ -9,11 +9,6 @@ API_FOOTBALL_KEY = os.getenv("FOOTBALL_API_KEY")
 HEADERS = {"x-apisports-key": API_FOOTBALL_KEY}
 BASE_URL = "https://v3.football.api-sports.io"
 
-TEAM_FIXO = {
-    "Bolívar": 2816,
-    "Blooming": 2818,
-}
-
 def normalizar(texto):
     return unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8').lower()
 
@@ -21,11 +16,10 @@ def similaridade(a, b):
     return SequenceMatcher(None, a, b).ratio()
 
 def buscar_team_id(nome_time):
-    if nome_time in TEAM_FIXO:
-        return TEAM_FIXO[nome_time]
-
     nome_limpo = normalizar(nome_time.strip())
-    termo_busca = normalizar(nome_time.strip().split()[0])
+
+    palavras = nome_time.strip().split()
+    termo_busca = " ".join(palavras[:2])  # Ex: "Houston Dynamo"
 
     url = f"{BASE_URL}/teams?search={termo_busca}"
     try:
@@ -33,20 +27,23 @@ def buscar_team_id(nome_time):
         dados = response.json().get('response', [])
 
         if not dados:
-            print(f"⚠️ Nenhum resultado encontrado na API para: {nome_time}")
+            print(f"⚠️ Nenhum resultado encontrado na API para: {termo_busca}")
             return None
 
-        melhor_match = max(
+        melhores = sorted(
             dados,
-            key=lambda x: similaridade(nome_limpo, normalizar(x['team']['name']))
+            key=lambda x: similaridade(nome_limpo, normalizar(x['team']['name'])),
+            reverse=True
         )
+
+        melhor_match = melhores[0]
         score = similaridade(nome_limpo, normalizar(melhor_match['team']['name']))
 
-        if score >= 0.7:
-            print(f"✅ Match: {nome_time} ≈ {melhor_match['team']['name']} ({score:.2f})")
+        if score >= 0.6:
+            print(f"✅ Match automático: {nome_time} ≈ {melhor_match['team']['name']} ({score:.2f})")
             return melhor_match['team']['id']
         else:
-            print(f"⚠️ Similaridade baixa: {nome_time} ≠ {melhor_match['team']['name']} ({score:.2f})")
+            print(f"⚠️ Similaridade baixa: '{nome_time}' ≠ '{melhor_match['team']['name']}' ({score:.2f})")
             return None
 
     except Exception as e:
