@@ -16,39 +16,46 @@ def similaridade(a, b):
     return SequenceMatcher(None, a, b).ratio()
 
 def buscar_team_id(nome_time):
+    def tentar_buscar(termo):
+        url = f"{BASE_URL}/teams?search={termo}"
+        try:
+            response = requests.get(url, headers=HEADERS)
+            return response.json().get('response', [])
+        except Exception as e:
+            print(f"❌ Erro na requisição para termo '{termo}': {e}")
+            return []
+
     nome_limpo = normalizar(nome_time.strip())
-
     palavras = nome_time.strip().split()
-    termo_busca = " ".join(palavras[:2])  # Ex: "Houston Dynamo"
+    termo_busca = " ".join(palavras[:2])  # ex: "Bolívar" ou "Houston Dynamo"
 
-    url = f"{BASE_URL}/teams?search={termo_busca}"
-    try:
-        response = requests.get(url, headers=HEADERS)
-        dados = response.json().get('response', [])
+    # Primeira tentativa com nome original
+    dados = tentar_buscar(termo_busca)
 
-        if not dados:
-            print(f"⚠️ Nenhum resultado encontrado na API para: {termo_busca}")
-            return None
+    # Se falhar, tenta com "club + nome"
+    if not dados:
+        print(f"⚠️ Tentando com prefixo 'Club' para: {nome_time}")
+        dados = tentar_buscar(f"club {termo_busca}")
 
-        melhores = sorted(
-            dados,
-            key=lambda x: similaridade(nome_limpo, normalizar(x['team']['name'])),
-            reverse=True
-        )
+    if not dados:
+        print(f"⚠️ Nenhum resultado encontrado na API para: {nome_time}")
+        return None
 
-        melhor_match = melhores[0]
-        score = similaridade(nome_limpo, normalizar(melhor_match['team']['name']))
+    melhores = sorted(
+        dados,
+        key=lambda x: similaridade(nome_limpo, normalizar(x['team']['name'])),
+        reverse=True
+    )
 
-        if score >= 0.6:
-            print(f"✅ Match automático: {nome_time} ≈ {melhor_match['team']['name']} ({score:.2f})")
-            return melhor_match['team']['id']
-        else:
-            print(f"⚠️ Similaridade baixa: '{nome_time}' ≠ '{melhor_match['team']['name']}' ({score:.2f})")
-            return None
+    melhor_match = melhores[0]
+    score = similaridade(nome_limpo, normalizar(melhor_match['team']['name']))
 
-    except Exception as e:
-        print(f"❌ Erro ao buscar team_id de {nome_time}: {e}")
-    return None
+    if score >= 0.6:
+        print(f"✅ Match automático: {nome_time} ≈ {melhor_match['team']['name']} ({score:.2f})")
+        return melhor_match['team']['id']
+    else:
+        print(f"⚠️ Similaridade baixa: {nome_time} ≠ {melhor_match['team']['name']} ({score:.2f})")
+        return None
 
 def gols_primeiro_tempo(team_id):
     url = f"{BASE_URL}/fixtures?team={team_id}&last=5"
