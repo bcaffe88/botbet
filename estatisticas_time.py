@@ -9,6 +9,13 @@ API_FOOTBALL_KEY = os.getenv("FOOTBALL_API_KEY")
 HEADERS = {"x-apisports-key": API_FOOTBALL_KEY}
 BASE_URL = "https://v3.football.api-sports.io"
 
+# Mapeamento manual de nomes comuns para nomes oficiais na API
+NOMES_OFICIAIS = {
+    "Alajuelense": "Liga Deportiva Alajuelense",
+    "Saprissa": "Deportivo Saprissa",
+    "Deportivo Saprissa": "Deportivo Saprissa",
+}
+
 def normalizar(texto):
     return unicodedata.normalize("NFKD", texto).encode("ASCII", "ignore").decode("utf-8").lower()
 
@@ -36,45 +43,22 @@ async def verificar_gol_ht(nome_jogo):
 
 def buscar_team_id(nome_time, pais="Costa Rica"):
     nome_limpo = normalizar(nome_time)
+    nome_oficial = NOMES_OFICIAIS.get(nome_time.strip(), nome_time.strip())
 
     try:
-        url_direto = f"{BASE_URL}/teams?search={nome_time}"
-        response = requests.get(url_direto, headers=HEADERS)
-        dados = response.json().get("response", [])
+        url = f"{BASE_URL}/teams?search={nome_oficial}"
+        resp = requests.get(url, headers=HEADERS)
+        dados = resp.json().get("response", [])
         if dados:
-            melhores = sorted(dados, key=lambda x: similaridade(nome_limpo, normalizar(x["team"]["name"])), reverse=True)
+            melhores = sorted(
+                dados, key=lambda x: similaridade(nome_limpo, normalizar(x["team"]["name"])), reverse=True
+            )
             score = similaridade(nome_limpo, normalizar(melhores[0]["team"]["name"]))
-            if score >= 0.6:
-                print(f"✅ Match direto: {nome_time} ≈ {melhores[0]['team']['name']} ({score:.2f})")
+            if score >= 0.5:
+                print(f"✅ Match encontrado: {nome_time} ≈ {melhores[0]['team']['name']} ({score:.2f})")
                 return melhores[0]["team"]["id"]
     except Exception as e:
-        print(f"❌ Erro na busca direta: {e}")
-
-    nomes_ligas = ["Liga Promerica", "Primera Division", "Liga de Ascenso"]
-    for liga_nome in nomes_ligas:
-        try:
-            liga_url = f"{BASE_URL}/leagues?search={liga_nome}&country={pais}"
-            liga_resp = requests.get(liga_url, headers=HEADERS)
-            ligas = liga_resp.json().get("response", [])
-            if not ligas:
-                continue
-
-            liga_id = ligas[0]["league"]["id"]
-            temporada = ligas[0]["seasons"][-1]["year"]
-            times_url = f"{BASE_URL}/teams?league={liga_id}&season={temporada}"
-            times_resp = requests.get(times_url, headers=HEADERS)
-            times = times_resp.json().get("response", [])
-            if not times:
-                continue
-
-            melhores = sorted(times, key=lambda x: similaridade(nome_limpo, normalizar(x["team"]["name"])), reverse=True)
-            melhor = melhores[0]
-            score = similaridade(nome_limpo, normalizar(melhor["team"]["name"]))
-            if score >= 0.5:
-                print(f"✅ Match via liga {liga_nome}: {nome_time} ≈ {melhor['team']['name']} ({score:.2f})")
-                return melhor["team"]["id"]
-        except Exception as e:
-            print(f"❌ Erro via liga {liga_nome}: {e}")
+        print(f"❌ Erro na busca por {nome_time}: {e}")
 
     print(f"⚠️ Nenhum match encontrado para: {nome_time}")
     return None
@@ -82,11 +66,11 @@ def buscar_team_id(nome_time, pais="Costa Rica"):
 def gols_primeiro_tempo(team_id):
     url = f"{BASE_URL}/fixtures?team={team_id}&last=5"
     try:
-        response = requests.get(url, headers=HEADERS)
-        jogos = response.json()["response"]
+        resp = requests.get(url, headers=HEADERS)
+        jogos = resp.json()["response"]
         return sum(1 for j in jogos if j["score"]["halftime"]["home"] > 0 or j["score"]["halftime"]["away"] > 0)
     except Exception as e:
-        print(f"❌ Erro gols 1T: {e}")
+        print(f"❌ Erro ao buscar gols 1T: {e}")
         return 0
 
 def media_gols_liga(league_id, season):
