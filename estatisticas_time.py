@@ -15,7 +15,9 @@ def similaridade(a, b):
 
 def buscar_team_id(nome_time):
     nome_limpo = normalizar(nome_time.strip())
-    url = f"{BASE_URL}/teams?search={nome_time}"
+    termo_busca = normalizar(nome_time.strip().split()[0])  # Usa apenas a primeira palavra
+
+    url = f"{BASE_URL}/teams?search={termo_busca}"
     try:
         response = requests.get(url, headers=HEADERS)
         dados = response.json().get('response', [])
@@ -31,9 +33,10 @@ def buscar_team_id(nome_time):
         score = similaridade(nome_limpo, normalizar(melhor_match['team']['name']))
 
         if score >= 0.7:
+            print(f"✅ Match: {nome_time} ≈ {melhor_match['team']['name']} ({score:.2f})")
             return melhor_match['team']['id']
         else:
-            print(f"⚠️ Similaridade baixa: '{nome_time}' ≠ '{melhor_match['team']['name']}' (score={score:.2f})")
+            print(f"⚠️ Similaridade baixa: {nome_time} ≠ {melhor_match['team']['name']} ({score:.2f})")
             return None
 
     except Exception as e:
