@@ -9,6 +9,7 @@ from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
 import aiohttp
+from estatisticas_time import resumo_estatistico, resumo_estendido, verificar_gol_ht
 
 # CONFIGURAÇÕES
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -123,7 +124,10 @@ async def analisar(texto):
 🏟 {jogo}
 🤖 OVERBOT VIP:
 {chr(10).join(resumo)}
-▶ ENTRADA: {conclusao}"""
+{liga_info}
+▶ ENTRADA: {conclusao}
+📊 Histórico:
+{historico}"""
 
             msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
             asyncio.create_task(tarefa_veredito(jogo, msg_enviada))
