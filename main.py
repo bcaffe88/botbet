@@ -56,6 +56,9 @@ async def analisar(texto):
         print(f"📌 Jogo detectado: {jogo}")
 
         try:
+            if " x " not in jogo:
+                raise ValueError(f"Formato de jogo inválido: {jogo}")
+
             nome_mandante, nome_visitante = jogo.split(" x ")
             historico = resumo_estatistico(nome_mandante.strip(), nome_visitante.strip())
             liga_info = resumo_estendido(nome_mandante.strip())
@@ -63,7 +66,7 @@ async def analisar(texto):
             print(f"⚠️ Erro ao gerar histórico: {e}")
             historico = "⚠️ Histórico indisponível"
             liga_info = "⚠️ Info da liga indisponível"
-            jogo = "Times não identificados"
+            jogo = "ENTRAR ✅"
 
         minuto_match = re.search(r"⏰\s*(\d+)", texto)
         minuto = int(minuto_match.group(1)) if minuto_match else None
