@@ -15,18 +15,43 @@ def normalizar(texto):
 def similaridade(a, b):
     return SequenceMatcher(None, a, b).ratio()
 
-# ✅ NOVO: Busca absoluta entre todos os times de um país
-def buscar_team_id_completo(nome_time, pais="Costa Rica"):
-    url = f"{BASE_URL}/teams?country={pais}"
+async def verificar_gol_ht(nome_jogo):
+    data_hoje = datetime.now().strftime("%Y-%m-%d")
+    url = f"{BASE_URL}/fixtures?date={data_hoje}"
     try:
-        response = requests.get(url, headers=HEADERS)
-        times = response.json().get("response", [])
-        nome_limpo = normalizar(nome_time)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=HEADERS) as resp:
+                data = await resp.json()
+                for item in data.get("response", []):
+                    casa = item["teams"]["home"]["name"]
+                    fora = item["teams"]["away"]["name"]
+                    halftime = item["score"]["halftime"]
+                    nome_match = f"{casa} x {fora}"
+                    if similaridade(normalizar(nome_jogo), normalizar(nome_match)) > 0.75:
+                        gols_ht = (halftime["home"] or 0) + (halftime["away"] or 0)
+                        return "✅ BATEU" if gols_ht >= 1 else "❌ NÃO BATEU"
+    except Exception as e:
+        print("❌ Erro ao verificar gol no HT:", e)
+    return "⏳ NÃO LOCALIZADO"
 
-        if not times:
-            print(f"❌ Nenhum time listado para país {pais}")
+def buscar_team_id_completo_por_liga(nome_time, liga_nome="Primera Division", pais="Costa Rica"):
+    nome_limpo = normalizar(nome_time)
+    try:
+        liga_url = f"{BASE_URL}/leagues?search={liga_nome}&country={pais}"
+        liga_resp = requests.get(liga_url, headers=HEADERS)
+        ligas = liga_resp.json().get("response", [])
+        if not ligas:
+            print(f"❌ Nenhuma liga encontrada: {liga_nome} ({pais})")
             return None
-
+        liga_id = ligas[0]["league"]["id"]
+        temporada = ligas[0]["seasons"][-1]["year"]
+        print(f"✅ Liga encontrada: {liga_id} / Temporada: {temporada}")
+        teams_url = f"{BASE_URL}/teams?league={liga_id}&season={temporada}"
+        teams_resp = requests.get(teams_url, headers=HEADERS)
+        times = teams_resp.json().get("response", [])
+        if not times:
+            print(f"❌ Nenhum time listado para liga {liga_id}")
+            return None
         melhores = sorted(
             times,
             key=lambda x: similaridade(nome_limpo, normalizar(x["team"]["name"])),
@@ -35,119 +60,68 @@ def buscar_team_id_completo(nome_time, pais="Costa Rica"):
         melhor = melhores[0]
         score = similaridade(nome_limpo, normalizar(melhor["team"]["name"]))
         if score >= 0.5:
-            print(f"✅ Match absoluto: {nome_time} ≈ {melhor['team']['name']} ({score:.2f})")
+            print(f"✅ Match por liga: {nome_time} ≈ {melhor['team']['name']} ({score:.2f})")
             return melhor["team"]["id"]
-        else:
-            print(f"⚠️ Similaridade muito baixa (mesmo na busca completa): {score:.2f}")
-            return None
     except Exception as e:
-        print(f"❌ Erro na busca completa por país: {e}")
-        return None
+        print(f"❌ Erro na busca por liga: {e}")
+    return None
 
-# 🔍 Busca com fallback
 def buscar_team_id(nome_time):
     def tentar_buscar(termo):
-        url = f"{BASE_URL}/teams?search={termo}"
         try:
-            response = requests.get(url, headers=HEADERS)
-            return response.json().get('response', [])
+            url = f"{BASE_URL}/teams?search={termo}"
+            resp = requests.get(url, headers=HEADERS)
+            return resp.json().get("response", [])
         except Exception as e:
-            print(f"❌ Erro na requisição para termo '{termo}': {e}")
+            print(f"❌ Erro na busca direta: {e}")
             return []
-
     nome_limpo = normalizar(nome_time.strip())
-
     dados = tentar_buscar(nome_time)
-
     if not dados:
-        print(f"⚠️ Tentando com prefixo 'Club' para: {nome_time}")
         dados = tentar_buscar(f"Club {nome_time}")
-
     if not dados:
-        print(f"⚠️ Nenhum resultado encontrado para: {nome_time}")
-        return buscar_team_id_completo(nome_time, pais="Costa Rica")
-
+        return buscar_team_id_completo_por_liga(nome_time)
     melhores = sorted(
         dados,
-        key=lambda x: similaridade(nome_limpo, normalizar(x['team']['name'])),
+        key=lambda x: similaridade(nome_limpo, normalizar(x["team"]["name"])),
         reverse=True
     )
-
-    melhor_match = melhores[0]
-    score = similaridade(nome_limpo, normalizar(melhor_match['team']['name']))
-
-    if score >= 0.5:
-        print(f"✅ Match: {nome_time} ≈ {melhor_match['team']['name']} ({score:.2f})")
-        return melhor_match['team']['id']
-    else:
-        print(f"⚠️ Similaridade baixa: {nome_time} ≠ {melhor_match['team']['name']} ({score:.2f})")
-        return None
-
-async def verificar_gol_ht(nome_jogo):
-    data_hoje = datetime.now().strftime("%Y-%m-%d")
-    url = f"{BASE_URL}/fixtures?date={data_hoje}"
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=HEADERS) as resp:
-                data = await resp.json()
-                jogos = data.get("response", [])
-
-                print(f"📅 {len(jogos)} jogos encontrados na API-Football em {data_hoje}")
-                for item in jogos:
-                    teams = item["teams"]
-                    halftime = item["score"]["halftime"]
-
-                    casa = teams["home"]["name"]
-                    fora = teams["away"]["name"]
-                    nome_match = f"{casa} x {fora}"
-                    print(f"- {nome_match}")
-
-                    if similaridade(normalizar(nome_jogo), normalizar(nome_match)) > 0.75:
-                        gols_ht = (halftime["home"] or 0) + (halftime["away"] or 0)
-                        print(f"🔍 Comparando: {nome_jogo} ≈ {nome_match} | Gols HT: {gols_ht}")
-                        return "✅ BATEU" if gols_ht >= 1 else "❌ NÃO BATEU"
-    except Exception as e:
-        print("❌ Erro ao consultar API-Football:", e)
-
-    return "⏳ NÃO LOCALIZADO"
+    melhor = melhores[0]
+    score = similaridade(nome_limpo, normalizar(melhor["team"]["name"]))
+    return melhor["team"]["id"] if score >= 0.5 else None
 
 def gols_primeiro_tempo(team_id):
     url = f"{BASE_URL}/fixtures?team={team_id}&last=5"
     try:
-        response = requests.get(url, headers=HEADERS)
-        jogos = response.json()['response']
-        return sum(1 for jogo in jogos if jogo['score']['halftime']['home'] > 0 or jogo['score']['halftime']['away'] > 0)
+        resp = requests.get(url, headers=HEADERS)
+        jogos = resp.json()['response']
+        return sum(1 for j in jogos if j['score']['halftime']['home'] > 0 or j['score']['halftime']['away'] > 0)
     except Exception as e:
-        print(f"❌ Erro buscando gols 1T: {e}")
+        print(f"❌ Erro gols 1T: {e}")
         return 0
 
 def media_gols_liga(league_id, season):
     url = f"{BASE_URL}/fixtures?league={league_id}&season={season}&last=10"
     try:
-        response = requests.get(url, headers=HEADERS)
-        jogos = response.json()['response']
+        resp = requests.get(url, headers=HEADERS)
+        jogos = resp.json()['response']
         if not jogos:
-            print(f"⚠️ Nenhum jogo encontrado para liga {league_id} - temporada {season}")
             return 0
         total = sum(j['goals']['home'] + j['goals']['away'] for j in jogos)
         return round(total / len(jogos), 2)
     except Exception as e:
-        print(f"❌ Erro na média da liga: {e}")
+        print(f"❌ Erro média da liga: {e}")
         return 0
 
 def confrontos_diretos(team1_id, team2_id):
     url = f"{BASE_URL}/fixtures/headtohead?h2h={team1_id}-{team2_id}&last=5"
     try:
-        response = requests.get(url, headers=HEADERS)
-        jogos = response.json()['response']
-        resultados = []
-        for jogo in jogos:
-            casa = jogo['teams']['home']['name']
-            fora = jogo['teams']['away']['name']
-            placar = jogo['score']['halftime']
-            resultados.append(f"{casa} {placar['home']}x{placar['away']} {fora}")
-        return resultados
+        resp = requests.get(url, headers=HEADERS)
+        jogos = resp.json()['response']
+        return [
+            f"{j['teams']['home']['name']} {j['score']['halftime']['home']}x{j['score']['halftime']['away']} {j['teams']['away']['name']}"
+            for j in jogos
+        ]
     except Exception as e:
         print(f"❌ Erro confrontos diretos: {e}")
         return []
@@ -155,49 +129,37 @@ def confrontos_diretos(team1_id, team2_id):
 def buscar_liga_time(team_id):
     url = f"{BASE_URL}/fixtures?team={team_id}&last=1"
     try:
-        response = requests.get(url, headers=HEADERS)
-        jogos = response.json()['response']
+        resp = requests.get(url, headers=HEADERS)
+        jogos = resp.json()['response']
         if jogos:
-            liga_id = jogos[0]['league']['id']
-            temporada = jogos[0]['league']['season']
-            return liga_id, temporada
+            liga = jogos[0]['league']
+            return liga['id'], liga['season']
     except Exception as e:
-        print(f"❌ Erro ao buscar liga do time {team_id}: {e}")
+        print(f"❌ Erro buscar liga time: {e}")
     return None, None
 
 def resumo_estatistico(nome_mandante, nome_visitante):
     try:
         team1_id = buscar_team_id(nome_mandante)
         team2_id = buscar_team_id(nome_visitante)
-
         texto_resumo = []
-
         if team1_id:
-            gols_mandante = gols_primeiro_tempo(team1_id)
-            texto_resumo.append(f"🏠 {nome_mandante}: {gols_mandante}/5 jogos com gol no 1T")
-
+            texto_resumo.append(f"🏠 {nome_mandante}: {gols_primeiro_tempo(team1_id)}/5 jogos com gol no 1T")
         if team2_id:
-            gols_visitante = gols_primeiro_tempo(team2_id)
-            texto_resumo.append(f"🚶 {nome_visitante}: {gols_visitante}/5 jogos com gol no 1T")
-
+            texto_resumo.append(f"🚶 {nome_visitante}: {gols_primeiro_tempo(team2_id)}/5 jogos com gol no 1T")
         if team1_id and team2_id:
             confrontos = confrontos_diretos(team1_id, team2_id)
-            gols_confronto_1t = sum(
-                1 for c in confrontos if "x" in c and int(c.split("x")[0].split()[-1]) + int(c.split("x")[1].split()[0]) > 0
-            )
-            texto_resumo.append(f"⚔️ Confrontos diretos: {gols_confronto_1t}/5 com gol no 1T")
-
+            gols_confronto = sum(1 for c in confrontos if "x" in c and int(c.split("x")[0].split()[-1]) + int(c.split("x")[1].split()[0]) > 0)
+            texto_resumo.append(f"⚔️ Confrontos diretos: {gols_confronto}/5 com gol no 1T")
         liga_id, temporada = buscar_liga_time(team1_id)
         if liga_id and temporada:
             media = media_gols_liga(liga_id, temporada)
             texto_resumo.append(f"📊 Média de gols da liga: {media}")
         else:
             texto_resumo.append("📊 Média de gols da liga: indisponível")
-
         return "\n".join(texto_resumo)
-
     except Exception as e:
-        print(f"❌ Erro ao gerar resumo estatístico: {e}")
+        print(f"❌ Erro resumo estatístico: {e}")
         return "⚠️ Histórico indisponível"
 
 def resumo_estendido(nome_time):
@@ -205,29 +167,16 @@ def resumo_estendido(nome_time):
         team_id = buscar_team_id(nome_time)
         if not team_id:
             return f"⚠️ Time não encontrado: {nome_time}"
-
         url = f"{BASE_URL}/fixtures?team={team_id}&last=1"
-        response = requests.get(url, headers=HEADERS)
-        data = response.json()['response']
-        if not data:
-            return f"⚠️ Sem jogos recentes para: {nome_time}"
-
-        jogo = data[0]
+        resp = requests.get(url, headers=HEADERS)
+        jogo = resp.json()['response'][0]
         liga = jogo['league']
-        league_id = liga['id']
-        nome_liga = liga['name']
-        pais = liga['country']
-        temporada = liga['season']
-
-        media = media_gols_liga(league_id, temporada)
-        interpretacao = "🔥 Liga com tendência OVER" if media >= 2.2 else "⚠️ Liga tende ao UNDER"
-
+        media = media_gols_liga(liga['id'], liga['season'])
+        tendencia = "🔥 Liga com tendência OVER" if media >= 2.2 else "⚠️ Liga tende ao UNDER"
         return (
-            f"🏆 {nome_liga} ({pais}) – Temporada {temporada}\n"
+            f"🏆 {liga['name']} ({liga['country']}) – Temporada {liga['season']}\n"
             f"📊 Média de gols: {media}\n"
-            f"{interpretacao}"
+            f"{tendencia}"
         )
-
     except Exception as e:
-        print(f"❌ Erro no resumo estendido: {e}")
         return f"⚠️ Erro ao buscar info da liga de {nome_time}"
