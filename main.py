@@ -19,47 +19,7 @@ CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"))
 FOOTBALL_API_KEY = os.getenv("FOOTBALL_API_KEY")
 
 bot = Bot(token=BOT_TOKEN)
-
-# UTILITÁRIOS
-def normalizar(texto):
-    return unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8').lower()
-
-def similaridade(a, b):
-    return SequenceMatcher(None, a, b).ratio()
-
-# API-FOOTBALL - Verifica gol no HT
-async def verificar_gol_ht(nome_jogo):
-    headers = {
-        "x-apisports-key": FOOTBALL_API_KEY
-    }
-    data_hoje = datetime.now().strftime("%Y-%m-%d")
-    url = f"https://v3.football.api-sports.io/fixtures?date={data_hoje}"
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as resp:
-                data = await resp.json()
-                jogos = data.get("response", [])
-
-                print(f"📅 {len(jogos)} jogos encontrados na API-Football em {data_hoje}")
-                for item in jogos:
-                    teams = item["teams"]
-                    halftime = item["score"]["halftime"]
-
-                    casa = teams["home"]["name"]
-                    fora = teams["away"]["name"]
-                    nome_match = f"{casa} x {fora}"
-                    print(f"- {nome_match}")
-
-                    if similaridade(normalizar(nome_jogo), normalizar(nome_match)) > 0.75:
-                        gols_ht = (halftime["home"] or 0) + (halftime["away"] or 0)
-                        print(f"🔍 Comparando: {nome_jogo} ≈ {nome_match} | Gols HT: {gols_ht}")
-                        return "✅ BATEU" if gols_ht >= 1 else "❌ NÃO BATEU"
-    except Exception as e:
-        print("❌ Erro ao consultar API-Football:", e)
-
-    return "⏳ NÃO LOCALIZADO"
-    
+   
 # Comando /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Bot de sinais refinados ativo!")
