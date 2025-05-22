@@ -1,30 +1,41 @@
 import requests
 import os
+import unicodedata
+from difflib import SequenceMatcher
 
 API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY")
 HEADERS = {"x-apisports-key": API_FOOTBALL_KEY}
 BASE_URL = "https://v3.football.api-sports.io"
 
-# 🧠 Correções automáticas para nomes problemáticos
-NOMES_CORRIGIDOS = {
-    "Ferroviária W": "Ferroviária",
-    "Corinthians W": "Corinthians",
-    "TP 49": "TP-49",
-    "Tampere United II": "Tampere United",
-    "Giana Erminio": "AC Giana Erminio",
-    # Adicione mais conforme necessário
-}
+def normalizar(texto):
+    return unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8').lower()
+
+def similaridade(a, b):
+    return SequenceMatcher(None, a, b).ratio()
 
 def buscar_team_id(nome_time):
-    nome_time = NOMES_CORRIGIDOS.get(nome_time.strip(), nome_time.strip())
+    nome_limpo = normalizar(nome_time.strip())
     url = f"{BASE_URL}/teams?search={nome_time}"
     try:
         response = requests.get(url, headers=HEADERS)
-        dados = response.json()['response']
-        if dados:
-            return dados[0]['team']['id']
-        else:
+        dados = response.json().get('response', [])
+
+        if not dados:
             print(f"⚠️ Nenhum resultado encontrado na API para: {nome_time}")
+            return None
+
+        melhor_match = max(
+            dados,
+            key=lambda x: similaridade(nome_limpo, normalizar(x['team']['name']))
+        )
+        score = similaridade(nome_limpo, normalizar(melhor_match['team']['name']))
+
+        if score >= 0.7:
+            return melhor_match['team']['id']
+        else:
+            print(f"⚠️ Similaridade baixa: '{nome_time}' ≠ '{melhor_match['team']['name']}' (score={score:.2f})")
+            return None
+
     except Exception as e:
         print(f"❌ Erro ao buscar team_id de {nome_time}: {e}")
     return None
