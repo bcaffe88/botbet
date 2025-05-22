@@ -8,7 +8,7 @@ from difflib import SequenceMatcher
 from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
-import aiohttp
+
 from estatisticas_time import resumo_estatistico, resumo_estendido, verificar_gol_ht
 
 # CONFIGURAÇÕES
@@ -17,17 +17,16 @@ API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 CHAT_ID_SINAL = int(os.getenv("CHAT_ID_SINAL"))
 CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"))
-FOOTBALL_API_KEY = os.getenv("FOOTBALL_API_KEY")
 
 bot = Bot(token=BOT_TOKEN)
-   
+
 # Comando /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Bot de sinais refinados ativo!")
 
 # Tarefa de veredito após 25 minutos
 async def tarefa_veredito(jogo, msg_original):
-    await asyncio.sleep(1500)
+    await asyncio.sleep(1500)  # 25 minutos
     resultado = await verificar_gol_ht(jogo)
 
     if resultado == "✅ BATEU":
@@ -52,9 +51,22 @@ async def tarefa_veredito(jogo, msg_original):
 async def analisar(texto):
     print("📊 Iniciando análise do sinal")
     try:
-        jogo = re.search(r'⚽️\s*(.+)', texto)
-        jogo = jogo.group(1).strip() if jogo else "Times não identificados"
+        jogo_match = re.search(r'⚽️\s*(.+)', texto)
+        jogo = jogo_match.group(1).strip() if jogo_match else "Times não identificados"
         print(f"📌 Jogo detectado: {jogo}")
+
+        try:
+            if " x " not in jogo:
+                raise ValueError(f"Formato de jogo inválido: {jogo}")
+
+            nome_mandante, nome_visitante = jogo.split(" x ")
+            historico = resumo_estatistico(nome_mandante.strip(), nome_visitante.strip())
+            liga_info = resumo_estendido(nome_mandante.strip())
+        except Exception as e:
+            print(f"⚠️ Erro ao gerar histórico: {e}")
+            historico = "⚠️ Histórico indisponível"
+            liga_info = "⚠️ Info da liga indisponível"
+            jogo = "ENTRAR ✅"
 
         minuto_match = re.search(r"⏰\s*(\d+)", texto)
         minuto = int(minuto_match.group(1)) if minuto_match else None
@@ -142,12 +154,12 @@ client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 
 @client.on(events.NewMessage())
 async def escutar(event):
-    print(f"📨 Mensagem recebida de {event.chat_id}:")
+    print(f"📨 Mensagem recebida de {event.chat_id}")
     print(event.message.message)
 
     if str(event.chat_id) == str(CHAT_ID_SINAL) and "OVER 0.5 HT" in event.message.message:
-        print("✅ Sinal detectado, enviando para análise.")
-        await analisar(event.message.message)
+        print("✅ Sinal detectado. Análise agendada.")
+        asyncio.create_task(analisar(event.message.message))
     else:
         print("⚠️ Mensagem ignorada.")
 
@@ -155,8 +167,5 @@ async def escutar(event):
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    client.start()
-    app.run_polling()
-
     client.start()
     app.run_polling()
