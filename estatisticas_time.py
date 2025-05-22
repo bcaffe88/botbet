@@ -9,11 +9,45 @@ API_FOOTBALL_KEY = os.getenv("FOOTBALL_API_KEY")
 HEADERS = {"x-apisports-key": API_FOOTBALL_KEY}
 BASE_URL = "https://v3.football.api-sports.io"
 
+# UTILITÁRIOS
 def normalizar(texto):
     return unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8').lower()
 
 def similaridade(a, b):
     return SequenceMatcher(None, a, b).ratio()
+
+# API-FOOTBALL - Verifica gol no HT
+async def verificar_gol_ht(nome_jogo):
+    headers = {
+        "x-apisports-key": FOOTBALL_API_KEY
+    }
+    data_hoje = datetime.now().strftime("%Y-%m-%d")
+    url = f"https://v3.football.api-sports.io/fixtures?date={data_hoje}"
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as resp:
+                data = await resp.json()
+                jogos = data.get("response", [])
+
+                print(f"📅 {len(jogos)} jogos encontrados na API-Football em {data_hoje}")
+                for item in jogos:
+                    teams = item["teams"]
+                    halftime = item["score"]["halftime"]
+
+                    casa = teams["home"]["name"]
+                    fora = teams["away"]["name"]
+                    nome_match = f"{casa} x {fora}"
+                    print(f"- {nome_match}")
+
+                    if similaridade(normalizar(nome_jogo), normalizar(nome_match)) > 0.75:
+                        gols_ht = (halftime["home"] or 0) + (halftime["away"] or 0)
+                        print(f"🔍 Comparando: {nome_jogo} ≈ {nome_match} | Gols HT: {gols_ht}")
+                        return "✅ BATEU" if gols_ht >= 1 else "❌ NÃO BATEU"
+    except Exception as e:
+        print("❌ Erro ao consultar API-Football:", e)
+
+    return "⏳ NÃO LOCALIZADO"
 
 def buscar_team_id(nome_time):
     def tentar_buscar(termo):
@@ -182,31 +216,3 @@ def resumo_estendido(nome_time):
         print(f"❌ Erro no resumo estendido: {e}")
         return f"⚠️ Erro ao buscar info da liga de {nome_time}"
 
-async def verificar_gol_ht(nome_jogo):
-    data_hoje = datetime.now().strftime("%Y-%m-%d")
-    url = f"{BASE_URL}/fixtures?date={data_hoje}"
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=HEADERS) as resp:
-                data = await resp.json()
-                jogos = data.get("response", [])
-
-                print(f"📅 {len(jogos)} jogos encontrados na API-Football em {data_hoje}")
-                for item in jogos:
-                    teams = item["teams"]
-                    halftime = item["score"]["halftime"]
-
-                    casa = teams["home"]["name"]
-                    fora = teams["away"]["name"]
-                    nome_match = f"{casa} x {fora}"
-                    print(f"- {nome_match}")
-
-                    if similaridade(normalizar(nome_jogo), normalizar(nome_match)) > 0.75:
-                        gols_ht = (halftime["home"] or 0) + (halftime["away"] or 0)
-                        print(f"🔍 Comparando: {nome_jogo} ≈ {nome_match} | Gols HT: {gols_ht}")
-                        return "✅ BATEU" if gols_ht >= 1 else "❌ NÃO BATEU"
-    except Exception as e:
-        print("❌ Erro ao consultar API-Football:", e)
-
-    return "⏳ NÃO LOCALIZADO"
