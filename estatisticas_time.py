@@ -9,24 +9,21 @@ API_FOOTBALL_KEY = os.getenv("FOOTBALL_API_KEY")
 HEADERS = {"x-apisports-key": API_FOOTBALL_KEY}
 BASE_URL = "https://v3.football.api-sports.io"
 
-# UTILITÁRIOS
+# 🔤 Normalização e similaridade
 def normalizar(texto):
     return unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8').lower()
 
 def similaridade(a, b):
     return SequenceMatcher(None, a, b).ratio()
 
-# API-FOOTBALL - Verifica gol no HT
+# ⚽️ Verifica gol no 1T via API
 async def verificar_gol_ht(nome_jogo):
-    headers = {
-        "x-apisports-key": FOOTBALL_API_KEY
-    }
     data_hoje = datetime.now().strftime("%Y-%m-%d")
-    url = f"https://v3.football.api-sports.io/fixtures?date={data_hoje}"
+    url = f"{BASE_URL}/fixtures?date={data_hoje}"
 
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as resp:
+            async with session.get(url, headers=HEADERS) as resp:
                 data = await resp.json()
                 jogos = data.get("response", [])
 
@@ -49,6 +46,7 @@ async def verificar_gol_ht(nome_jogo):
 
     return "⏳ NÃO LOCALIZADO"
 
+# 🔍 Busca pelo ID do time com fallback "club + nome"
 def buscar_team_id(nome_time):
     def tentar_buscar(termo):
         url = f"{BASE_URL}/teams?search={termo}"
@@ -61,51 +59,41 @@ def buscar_team_id(nome_time):
 
     nome_limpo = normalizar(nome_time.strip())
     palavras = nome_time.strip().split()
-    termo_busca = " ".join(palavras[:2])  # ex: "Bolívar" ou "Houston Dynamo"
+    termo_busca = " ".join(palavras[:2])
 
-    # Primeira tentativa com nome original
     dados = tentar_buscar(termo_busca)
-
-    # Se falhar, tenta com "club + nome"
     if not dados:
         print(f"⚠️ Tentando com prefixo 'Club' para: {nome_time}")
         dados = tentar_buscar(f"club {termo_busca}")
 
     if not dados:
-        print(f"⚠️ Nenhum resultado encontrado na API para: {nome_time}")
+        print(f"⚠️ Nenhum resultado encontrado para: {nome_time}")
         return None
 
-    melhores = sorted(
-        dados,
-        key=lambda x: similaridade(nome_limpo, normalizar(x['team']['name'])),
-        reverse=True
-    )
-
+    melhores = sorted(dados, key=lambda x: similaridade(nome_limpo, normalizar(x['team']['name'])), reverse=True)
     melhor_match = melhores[0]
     score = similaridade(nome_limpo, normalizar(melhor_match['team']['name']))
 
     if score >= 0.6:
-        print(f"✅ Match automático: {nome_time} ≈ {melhor_match['team']['name']} ({score:.2f})")
+        print(f"✅ Match: {nome_time} ≈ {melhor_match['team']['name']} ({score:.2f})")
         return melhor_match['team']['id']
     else:
         print(f"⚠️ Similaridade baixa: {nome_time} ≠ {melhor_match['team']['name']} ({score:.2f})")
         return None
 
+# 📈 Estatísticas de gols no 1T
 def gols_primeiro_tempo(team_id):
     url = f"{BASE_URL}/fixtures?team={team_id}&last=5"
     try:
         response = requests.get(url, headers=HEADERS)
         jogos = response.json()['response']
-        gols_1t = 0
-        for jogo in jogos:
-            placar_1t = jogo['score']['halftime']
-            if placar_1t['home'] > 0 or placar_1t['away'] > 0:
-                gols_1t += 1
+        gols_1t = sum(1 for jogo in jogos if jogo['score']['halftime']['home'] > 0 or jogo['score']['halftime']['away'] > 0)
         return gols_1t
     except Exception as e:
         print(f"❌ Erro buscando gols 1T: {e}")
         return 0
 
+# 📊 Média de gols da liga
 def media_gols_liga(league_id, season):
     url = f"{BASE_URL}/fixtures?league={league_id}&season={season}&last=10"
     try:
@@ -120,6 +108,7 @@ def media_gols_liga(league_id, season):
         print(f"❌ Erro na média da liga: {e}")
         return 0
 
+# 🤝 Confrontos diretos
 def confrontos_diretos(team1_id, team2_id):
     url = f"{BASE_URL}/fixtures/headtohead?h2h={team1_id}-{team2_id}&last=5"
     try:
@@ -136,6 +125,7 @@ def confrontos_diretos(team1_id, team2_id):
         print(f"❌ Erro confrontos diretos: {e}")
         return []
 
+# 🔎 Liga do time
 def buscar_liga_time(team_id):
     url = f"{BASE_URL}/fixtures?team={team_id}&last=1"
     try:
@@ -149,6 +139,7 @@ def buscar_liga_time(team_id):
         print(f"❌ Erro ao buscar liga do time {team_id}: {e}")
     return None, None
 
+# 🧾 Resumo estatístico
 def resumo_estatistico(nome_mandante, nome_visitante):
     try:
         team1_id = buscar_team_id(nome_mandante)
@@ -184,6 +175,7 @@ def resumo_estatistico(nome_mandante, nome_visitante):
         print(f"❌ Erro ao gerar resumo estatístico: {e}")
         return "⚠️ Histórico indisponível"
 
+# 🧾 Resumo da liga
 def resumo_estendido(nome_time):
     try:
         team_id = buscar_team_id(nome_time)
@@ -215,4 +207,3 @@ def resumo_estendido(nome_time):
     except Exception as e:
         print(f"❌ Erro no resumo estendido: {e}")
         return f"⚠️ Erro ao buscar info da liga de {nome_time}"
-
