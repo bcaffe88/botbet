@@ -1,173 +1,212 @@
+import requests
 import os
-import re
 import unicodedata
-import asyncio
-from datetime import datetime
 from difflib import SequenceMatcher
+from datetime import datetime
+import aiohttp
 
-from telegram import Update, Bot
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from telethon import TelegramClient, events
+API_FOOTBALL_KEY = os.getenv("FOOTBALL_API_KEY")
+HEADERS = {"x-apisports-key": API_FOOTBALL_KEY}
+BASE_URL = "https://v3.football.api-sports.io"
 
-from estatisticas_time import resumo_estatistico, resumo_estendido, verificar_gol_ht
+def normalizar(texto):
+    return unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8').lower()
 
-# CONFIGURAÇÕES
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
-CHAT_ID_SINAL = int(os.getenv("CHAT_ID_SINAL"))
-CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"))
+def similaridade(a, b):
+    return SequenceMatcher(None, a, b).ratio()
 
-bot = Bot(token=BOT_TOKEN)
+def buscar_team_id(nome_time):
+    def tentar_buscar(termo):
+        url = f"{BASE_URL}/teams?search={termo}"
+        try:
+            response = requests.get(url, headers=HEADERS)
+            return response.json().get('response', [])
+        except Exception as e:
+            print(f"❌ Erro na requisição para termo '{termo}': {e}")
+            return []
 
-# Comando /start
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🤖 Bot de sinais refinados ativo!")
+    nome_limpo = normalizar(nome_time.strip())
+    palavras = nome_time.strip().split()
+    termo_busca = " ".join(palavras[:2])  # ex: "Bolívar" ou "Houston Dynamo"
 
-# Tarefa de veredito após 35 minutos
-async def tarefa_veredito(jogo, msg_original):
-    await asyncio.sleep(2100)  # 35 minutos
-    resultado = await verificar_gol_ht(jogo)
+    # Primeira tentativa com nome original
+    dados = tentar_buscar(termo_busca)
 
-    if resultado == "✅ BATEU":
-        resultado_final = "G R E N N ✅✅✅✅✅✅✅✅✅✅ "
-    elif resultado == "❌ NÃO BATEU":
-        resultado_final = "R E D ❌"
-    else:
-        resultado_final = "⏳ BUSCANDO RESULTADO*"
+    # Se falhar, tenta com "club + nome"
+    if not dados:
+        print(f"⚠️ Tentando com prefixo 'Club' para: {nome_time}")
+        dados = tentar_buscar(f"club {termo_busca}")
 
-    novo_texto = f"""{msg_original.text}
+    if not dados:
+        print(f"⚠️ Nenhum resultado encontrado na API para: {nome_time}")
+        return None
 
-{resultado_final}"""
-
-    await bot.edit_message_text(
-        chat_id=CHAT_ID_DESTINO,
-        message_id=msg_original.message_id,
-        text=novo_texto,
-        parse_mode="Markdown"
+    melhores = sorted(
+        dados,
+        key=lambda x: similaridade(nome_limpo, normalizar(x['team']['name'])),
+        reverse=True
     )
 
-# Função principal de análise do sinal
-async def analisar(texto):
-    print("📊 Iniciando análise do sinal")
+    melhor_match = melhores[0]
+    score = similaridade(nome_limpo, normalizar(melhor_match['team']['name']))
+
+    if score >= 0.6:
+        print(f"✅ Match automático: {nome_time} ≈ {melhor_match['team']['name']} ({score:.2f})")
+        return melhor_match['team']['id']
+    else:
+        print(f"⚠️ Similaridade baixa: {nome_time} ≠ {melhor_match['team']['name']} ({score:.2f})")
+        return None
+
+def gols_primeiro_tempo(team_id):
+    url = f"{BASE_URL}/fixtures?team={team_id}&last=5"
     try:
-        jogo_match = re.search(r'⚽️\s*(.+)', texto)
-        jogo = jogo_match.group(1).strip() if jogo_match else "Times não identificados"
-        print(f"📌 Jogo detectado: {jogo}")
+        response = requests.get(url, headers=HEADERS)
+        jogos = response.json()['response']
+        gols_1t = 0
+        for jogo in jogos:
+            placar_1t = jogo['score']['halftime']
+            if placar_1t['home'] > 0 or placar_1t['away'] > 0:
+                gols_1t += 1
+        return gols_1t
+    except Exception as e:
+        print(f"❌ Erro buscando gols 1T: {e}")
+        return 0
 
-        try:
-            if " x " not in jogo:
-                raise ValueError(f"Formato de jogo inválido: {jogo}")
+def media_gols_liga(league_id, season):
+    url = f"{BASE_URL}/fixtures?league={league_id}&season={season}&last=10"
+    try:
+        response = requests.get(url, headers=HEADERS)
+        jogos = response.json()['response']
+        if not jogos:
+            print(f"⚠️ Nenhum jogo encontrado para liga {league_id} - temporada {season}")
+            return 0
+        total = sum(j['goals']['home'] + j['goals']['away'] for j in jogos)
+        return round(total / len(jogos), 2)
+    except Exception as e:
+        print(f"❌ Erro na média da liga: {e}")
+        return 0
 
-            nome_mandante, nome_visitante = jogo.split(" x ")
-            historico = resumo_estatistico(nome_mandante.strip(), nome_visitante.strip())
-            liga_info = resumo_estendido(nome_mandante.strip())
-        except Exception as e:
-            print(f"⚠️ Erro ao gerar histórico: {e}")
-            historico = "⚠️ Histórico indisponível"
-            liga_info = "⚠️ Info da liga indisponível"
-            jogo = "ENTRAR ✅"
+def confrontos_diretos(team1_id, team2_id):
+    url = f"{BASE_URL}/fixtures/headtohead?h2h={team1_id}-{team2_id}&last=5"
+    try:
+        response = requests.get(url, headers=HEADERS)
+        jogos = response.json()['response']
+        resultados = []
+        for jogo in jogos:
+            casa = jogo['teams']['home']['name']
+            fora = jogo['teams']['away']['name']
+            placar = jogo['score']['halftime']
+            resultados.append(f"{casa} {placar['home']}x{placar['away']} {fora}")
+        return resultados
+    except Exception as e:
+        print(f"❌ Erro confrontos diretos: {e}")
+        return []
 
-        minuto_match = re.search(r"⏰\s*(\d+)", texto)
-        minuto = int(minuto_match.group(1)) if minuto_match else None
+def buscar_liga_time(team_id):
+    url = f"{BASE_URL}/fixtures?team={team_id}&last=1"
+    try:
+        response = requests.get(url, headers=HEADERS)
+        jogos = response.json()['response']
+        if jogos:
+            liga_id = jogos[0]['league']['id']
+            temporada = jogos[0]['league']['season']
+            return liga_id, temporada
+    except Exception as e:
+        print(f"❌ Erro ao buscar liga do time {team_id}: {e}")
+    return None, None
 
-        ia_match = re.search(r"OVER 0\.5 HT:\s*([\d.]+)%", texto)
-        ia = float(ia_match.group(1)) if ia_match else None
+def resumo_estatistico(nome_mandante, nome_visitante):
+    try:
+        team1_id = buscar_team_id(nome_mandante)
+        team2_id = buscar_team_id(nome_visitante)
 
-        match_perigosos = re.findall(r"Ataques Perigosos:\s*(\d+)/(\d+)", texto)
-        perigosos = list(map(int, match_perigosos[0])) if match_perigosos else [0, 0]
+        texto_resumo = []
 
-        match_posse = re.findall(r"Posse de Bola:\s*(\d+)/(\d+)", texto)
-        posse = list(map(int, match_posse[0])) if match_posse else [0, 0]
+        if team1_id:
+            gols_mandante = gols_primeiro_tempo(team1_id)
+            texto_resumo.append(f"🏠 {nome_mandante}: {gols_mandante}/5 jogos com gol no 1T")
 
-        match_escanteios = re.findall(r"Escanteios:\s*(\d+)/(\d+)", texto)
-        escanteios = list(map(int, match_escanteios[0])) if match_escanteios else [0, 0]
+        if team2_id:
+            gols_visitante = gols_primeiro_tempo(team2_id)
+            texto_resumo.append(f"🚶 {nome_visitante}: {gols_visitante}/5 jogos com gol no 1T")
 
-        match_no_gol = re.findall(r"No Gol:\s*(\d+)/(\d+)", texto)
-        no_gol = list(map(int, match_no_gol[0])) if match_no_gol else [0, 0]
+        if team1_id and team2_id:
+            confrontos = confrontos_diretos(team1_id, team2_id)
+            gols_confronto_1t = sum(
+                1 for c in confrontos if "x" in c and int(c.split("x")[0].split()[-1]) + int(c.split("x")[1].split()[0]) > 0
+            )
+            texto_resumo.append(f"⚔️ Confrontos diretos: {gols_confronto_1t}/5 com gol no 1T")
 
-        match_chutes = re.findall(r"Total:\s*(\d+)/(\d+)", texto)
-        chutes = list(map(int, match_chutes[0])) if match_chutes else [0, 0]
-
-        vento_match = re.search(r"🌬️\s*([\d.]+)\s*m/s", texto)
-        vento = float(vento_match.group(1)) if vento_match else None
-
-        criterios, resumo = [], []
-        pontos = 0
-
-        if ia and ia >= 75:
-            criterios.append("IA")
-            pontos += 2
-        resumo.append(f"• IA: {ia}%")
-
-        if minuto and 16 <= minuto <= 22:
-            criterios.append("Minuto ideal")
-            pontos += 1
-
-        if sum(perigosos) >= 10 and abs(perigosos[0] - perigosos[1]) >= 7:
-            criterios.append("Ataques perigosos")
-            pontos += 2
-
-        if sum(no_gol) >= 1:
-            criterios.append("Finalizações no gol")
-            pontos += 2
-
-        if sum(escanteios) >= 2:
-            criterios.append("Escanteios")
-            pontos += 1
-
-        if vento and vento < 15:
-            criterios.append("Vento ideal")
-            pontos += 1
-
-        if sum(chutes) >= 4:
-            criterios.append("Chutes totais")
-            pontos += 1
-
-        if posse[0] >= 60 or posse[1] >= 60:
-            criterios.append("Posse dominante")
-            pontos += 1
-
-        if pontos >= 7:
-            veredito = "ENTRAR ✅"
-            conclusao = "OVER 0.5 HT."
-
-            msg = f"""⚽️ {veredito} 
-🏟 {jogo}
-🤖 OVERBOT VIP:
-{chr(10).join(resumo)}
-▶ ENTRADA: {conclusao}
-
-📊 Histórico:
-{historico}
-
-{liga_info}"""
-
-            msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
-            asyncio.create_task(tarefa_veredito(jogo, msg_enviada))
+        liga_id, temporada = buscar_liga_time(team1_id)
+        if liga_id and temporada:
+            media = media_gols_liga(liga_id, temporada)
+            texto_resumo.append(f"📊 Média de gols da liga: {media}")
         else:
-            print("❌ Veredito não é 'ENTRAR'. Nenhum envio será feito.")
+            texto_resumo.append("📊 Média de gols da liga: indisponível")
+
+        return "\n".join(texto_resumo)
 
     except Exception as e:
-        print("❌ Erro ao analisar:", e)
+        print(f"❌ Erro ao gerar resumo estatístico: {e}")
+        return "⚠️ Histórico indisponível"
 
-# MONITORAMENTO COM TELETHON
-client = TelegramClient("sessao_sinais", API_ID, API_HASH)
+def resumo_estendido(nome_time):
+    try:
+        team_id = buscar_team_id(nome_time)
+        if not team_id:
+            return f"⚠️ Time não encontrado: {nome_time}"
 
-@client.on(events.NewMessage())
-async def escutar(event):
-    print(f"📨 Mensagem recebida de {event.chat_id}")
-    print(event.message.message)
+        url = f"{BASE_URL}/fixtures?team={team_id}&last=1"
+        response = requests.get(url, headers=HEADERS)
+        data = response.json()['response']
+        if not data:
+            return f"⚠️ Sem jogos recentes para: {nome_time}"
 
-    if str(event.chat_id) == str(CHAT_ID_SINAL) and "OVER 0.5 HT" in event.message.message:
-        print("✅ Sinal detectado. Análise agendada.")
-        asyncio.create_task(analisar(event.message.message))
-    else:
-        print("⚠️ Mensagem ignorada.")
+        jogo = data[0]
+        liga = jogo['league']
+        league_id = liga['id']
+        nome_liga = liga['name']
+        pais = liga['country']
+        temporada = liga['season']
 
-# INICIALIZAÇÃO DO BOT
-if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    client.start()
-    app.run_polling()
+        media = media_gols_liga(league_id, temporada)
+        interpretacao = "🔥 Liga com tendência OVER" if media >= 2.2 else "⚠️ Liga tende ao UNDER"
+
+        return (
+            f"🏆 {nome_liga} ({pais}) – Temporada {temporada}\n"
+            f"📊 Média de gols: {media}\n"
+            f"{interpretacao}"
+        )
+
+    except Exception as e:
+        print(f"❌ Erro no resumo estendido: {e}")
+        return f"⚠️ Erro ao buscar info da liga de {nome_time}"
+
+async def verificar_gol_ht(nome_jogo):
+    data_hoje = datetime.now().strftime("%Y-%m-%d")
+    url = f"{BASE_URL}/fixtures?date={data_hoje}"
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=HEADERS) as resp:
+                data = await resp.json()
+                jogos = data.get("response", [])
+
+                print(f"📅 {len(jogos)} jogos encontrados na API-Football em {data_hoje}")
+                for item in jogos:
+                    teams = item["teams"]
+                    halftime = item["score"]["halftime"]
+
+                    casa = teams["home"]["name"]
+                    fora = teams["away"]["name"]
+                    nome_match = f"{casa} x {fora}"
+                    print(f"- {nome_match}")
+
+                    if similaridade(normalizar(nome_jogo), normalizar(nome_match)) > 0.75:
+                        gols_ht = (halftime["home"] or 0) + (halftime["away"] or 0)
+                        print(f"🔍 Comparando: {nome_jogo} ≈ {nome_match} | Gols HT: {gols_ht}")
+                        return "✅ BATEU" if gols_ht >= 1 else "❌ NÃO BATEU"
+    except Exception as e:
+        print("❌ Erro ao consultar API-Football:", e)
+
+    return "⏳ NÃO LOCALIZADO"
