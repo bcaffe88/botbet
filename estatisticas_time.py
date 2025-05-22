@@ -5,13 +5,26 @@ API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY")
 HEADERS = {"x-apisports-key": API_FOOTBALL_KEY}
 BASE_URL = "https://v3.football.api-sports.io"
 
+# 🧠 Correções automáticas para nomes problemáticos
+NOMES_CORRIGIDOS = {
+    "Ferroviária W": "Ferroviária",
+    "Corinthians W": "Corinthians",
+    "TP 49": "TP-49",
+    "Tampere United II": "Tampere United",
+    "Giana Erminio": "AC Giana Erminio",
+    # Adicione mais conforme necessário
+}
+
 def buscar_team_id(nome_time):
+    nome_time = NOMES_CORRIGIDOS.get(nome_time.strip(), nome_time.strip())
     url = f"{BASE_URL}/teams?search={nome_time}"
     try:
         response = requests.get(url, headers=HEADERS)
         dados = response.json()['response']
         if dados:
             return dados[0]['team']['id']
+        else:
+            print(f"⚠️ Nenhum resultado encontrado na API para: {nome_time}")
     except Exception as e:
         print(f"❌ Erro ao buscar team_id de {nome_time}: {e}")
     return None
