@@ -255,26 +255,26 @@ async def analisar(texto):
 ▶️ ENTRADA: {conclusao}
 ⏰ Aguardando resultado..."""
 
-# 🔍 Estatísticas do confronto
-           try:
-    nomes_times = jogo.split(" x ")
-         if len(nomes_times) == 2:
-        resumo_stats = await resumo_estatistico(nomes_times[0], nomes_times[1])
-     else:
-        resumo_stats = "📊 Estatísticas indisponíveis para o confronto"
-  except Exception as e:
-    logger.error(f"Erro ao gerar estatísticas: {e}")
-    resumo_stats = "⚠️ Erro ao obter dados históricos"
+            # 🔍 Estatísticas do confronto
+            try:
+                nomes_times = jogo.split(" x ")
+                if len(nomes_times) == 2:
+                    resumo_stats = await resumo_estatistico(nomes_times[0], nomes_times[1])
+                else:
+                    resumo_stats = "📊 Estatísticas indisponíveis para o confronto"
+            except Exception as e:
+                logger.error(f"Erro ao gerar estatísticas: {e}")
+                resumo_stats = "⚠️ Erro ao obter dados históricos"
 
-msg += f"\n\n{resumo_stats}"
+            msg += f"\n\n{resumo_stats}"
 
             try:
                 msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
                 logger.info("✅ Sinal de entrada enviado com sucesso")
-                
+
                 # Agendar verificação do resultado
                 asyncio.create_task(tarefa_veredito(jogo, msg_enviada))
-                
+
             except Exception as e:
                 logger.error(f"Erro ao enviar mensagem: {e}")
         else:
