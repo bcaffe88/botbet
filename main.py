@@ -248,20 +248,21 @@ async def analisar(texto):
             veredito = "ENTRAR ✅"
             conclusao = "OVER 0.5 HT"
 
-            msg = f"""⚽️ {veredito}
+            msg = f"""⚽️ {veredito} 
 🏟️ {jogo}
 🤖 OVERBOT VIP
 {chr(10).join(resumo)}
-▶️ ENTRADA: {conclusao}"""
+▶️ ENTRADA: {conclusao}
+⏰ Aguardando resultado..."""
 
 # 🔍 Estatísticas do confronto
-            try:
-                nomes_times = jogo.split(" x ")
+           try:
+    nomes_times = jogo.split(" x ")
          if len(nomes_times) == 2:
-            resumo_stats = await resumo_estatistico(nomes_times[0], nomes_times[1])
-       else:
+        resumo_stats = await resumo_estatistico(nomes_times[0], nomes_times[1])
+     else:
         resumo_stats = "📊 Estatísticas indisponíveis para o confronto"
-   except Exception as e:
+  except Exception as e:
     logger.error(f"Erro ao gerar estatísticas: {e}")
     resumo_stats = "⚠️ Erro ao obter dados históricos"
 
