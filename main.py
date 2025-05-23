@@ -5,8 +5,6 @@ import asyncio
 import logging
 from datetime import datetime
 from difflib import SequenceMatcher
-from dotenv import load_dotenv
-
 from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
@@ -18,9 +16,6 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-# Carregar variáveis de ambiente
-load_dotenv()
 
 # Validar e configurar variáveis de ambiente
 required_vars = ["BOT_TOKEN", "API_ID", "API_HASH", "CHAT_ID_SINAL", "CHAT_ID_DESTINO", "FOOTBALL_API_KEY"]
