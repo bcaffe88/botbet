@@ -151,7 +151,7 @@ async def buscar_team_id(nome_time: str, pais: str = "Costa Rica") -> Optional[i
                         team_info = melhor_match.get("team", {})
                         score = similaridade(nome_limpo, team_info.get("name", ""))
                         
-                        if score >= 0.5:
+                        if score >= 0.4:
                             logger.info(f"✅ Time encontrado: {nome_time} ≈ {team_info.get('name')} ({score:.2f})")
                             return team_info.get("id")
                             
