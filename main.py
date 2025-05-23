@@ -248,7 +248,8 @@ async def analisar(texto):
             veredito = "ENTRAR ✅"
             conclusao = "OVER 0.5 HT"
 
-            msg = f"""⚽️ {🏟️ {jogo}
+            msg = f"""⚽️ {veredito}
+🏟️ {jogo}
 🤖 OVERBOT VIP
 {chr(10).join(resumo)}
 ▶️ ENTRADA: {conclusao}"""
