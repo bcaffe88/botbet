@@ -122,12 +122,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Erro no comando /start: {e}")
 
-# Tarefa de veredito após 25 minutos (1500 segundos)
+# Tarefa de veredito após 35 minutos (1500 segundos)
 async def tarefa_veredito(jogo, msg_original):
     """Executa verificação do resultado após 25 minutos"""
     try:
-        logger.info(f"⏰ Aguardando 25 minutos para verificar resultado de: {jogo}")
-        await asyncio.sleep(1500)  # 25 minutos = 1500 segundos
+        logger.info(f"⏰ Aguardando 35 minutos para verificar resultado de: {jogo}")
+        await asyncio.sleep(2100)  # 25 minutos = 1500 segundos
         
         resultado = await verificar_gol_ht(jogo)
         logger.info(f"📊 Result para {jogo}: {resultado}")
@@ -208,43 +208,36 @@ async def analisar(texto):
         if minuto and 16 <= minuto <= 22:
             criterios.append("Minuto ideal")
             pontos += 1
-        resumo.append(f"• Minuto: {minuto}" if minuto else "• Minuto: N/A")
 
         # Critério ataques perigosos
         if sum(perigosos) >= 10 and abs(perigosos[0] - perigosos[1]) >= 7:
             criterios.append("Ataques perigosos")
             pontos += 2
-        resumo.append(f"• Ataques: {perigosos[0]}/{perigosos[1]}")
 
         # Critério finalizações no gol
         if sum(no_gol) >= 1:
             criterios.append("Finalizações no gol")
             pontos += 2
-        resumo.append(f"• No gol: {no_gol[0]}/{no_gol[1]}")
 
         # Critério escanteios
         if sum(escanteios) >= 2:
             criterios.append("Escanteios")
             pontos += 1
-        resumo.append(f"• Escanteios: {escanteios[0]}/{escanteios[1]}")
 
         # Critério vento
         if vento and vento < 15:
             criterios.append("Vento favorável")
             pontos += 1
-        resumo.append(f"• Vento: {vento} m/s" if vento else "• Vento: N/A")
 
         # Critério chutes totais
         if sum(chutes) >= 4:
             criterios.append("Chutes suficientes")
             pontos += 1
-        resumo.append(f"• Chutes: {chutes[0]}/{chutes[1]}")
 
         # Critério posse dominante
         if posse[0] >= 60 or posse[1] >= 60:
             criterios.append("Posse dominante")
             pontos += 1
-        resumo.append(f"• Posse: {posse[0]}%/{posse[1]}%")
 
         logger.info(f"📈 Pontuação: {pontos}/10 | Critérios atendidos: {len(criterios)}")
         logger.info(f"📋 Critérios: {', '.join(criterios) if criterios else 'Nenhum'}")
@@ -257,9 +250,7 @@ async def analisar(texto):
             msg = f"""⚽️ {veredito} 
 🏟️ {jogo}
 🤖 OVERBOT VIP
-
 {chr(10).join(resumo)}
-
 ▶️ ENTRADA: {conclusao}
 ⏰ Aguardando resultado..."""
 
