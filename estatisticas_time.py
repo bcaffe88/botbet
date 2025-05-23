@@ -39,6 +39,8 @@ NOMES_OFICIAIS = {
     "Liverpool": "Liverpool FC",
     "Chelsea": "Chelsea FC",
     "Arsenal": "Arsenal FC",
+    "FC Twente": "Twente",
+    "NEC Nijmegen": "NEC Nijmegen",
 }
 
 def normalizar(texto: str) -> str:
