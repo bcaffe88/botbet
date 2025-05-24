@@ -243,7 +243,7 @@ async def analisar(texto):
         logger.info(f"📋 Critérios: {', '.join(criterios) if criterios else 'Nenhum'}")
 
         # Decisão final
-        if pontos >= 7:
+        if pontos >= 8:
             veredito = "ENTRAR ✅"
             conclusao = "OVER 0.5 HT"
 
