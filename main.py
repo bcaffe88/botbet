@@ -141,7 +141,7 @@ async def tarefa_veredito(jogo, msg_original):
 
         novo_texto = f"""{msg_original.text}
 
-─────────────────────
+───────────────
 {resultado_final}"""
 
         await bot.edit_message_text(
@@ -199,10 +199,10 @@ async def analisar(texto):
         pontos = 0
 
         # Critério IA
-        if ia and ia >= 75:
+        if ia and ia >= 70:
             criterios.append("IA favorável")
             pontos += 2
-        resumo.append(f"• IA: {ia}%" if ia else "• IA: N/A")
+        resumo.append(f"{ia}%" if ia else "• IA: N/A")
 
         # Critério minuto
         if minuto and 16 <= minuto <= 22:
@@ -249,8 +249,7 @@ async def analisar(texto):
 
             msg = f"""⚽️ {veredito} 
 🏟️ {jogo}
-🤖 OVERBOT VIP
-{chr(10).join(resumo)}
+🤖 OVERBOT VIP {chr(10).join(resumo)}
 ▶️ ENTRADA: {conclusao}
 ⏰ Aguardando resultado..."""
 
