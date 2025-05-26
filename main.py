@@ -190,7 +190,7 @@ async def analisar(texto):
         match_chutes = re.findall(r"Total:\s*(\d+)/(\d+)", texto)
         chutes = list(map(int, match_chutes[0])) if match_chutes else [0, 0]
 
-        vento_match = re.search(r"🌬️\s*([\d.]+)\s*m/s", texto)
+        vento_match = re.search(r"💨\s*([\d.]+)\s*m/s", texto)
         vento = float(vento_match.group(1)) if vento_match else None
 
         # Análise dos critérios
