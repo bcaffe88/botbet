@@ -276,6 +276,8 @@ async def analisar(texto):
         if ia and ia >= 70:
             criterios_tecnicos.append("IA favorável")
             pontos_tecnicos += 2
+        resumo.append(f"{ia}%" if ia else "IA: N/A")
+
 
         # Critério minuto
         if minuto and 16 <= minuto <= 22:
@@ -344,21 +346,20 @@ async def analisar(texto):
             else:
                 confianca = "MÉDIA ⚠️"
             
-            veredito = f"ENTRAR CONFIANÇA {confianca}"
+            veredito = f"ENTRAR | CONFIANÇA: {confianca}"
             conclusao = "OVER 0.5 HT"
 
             # Preparar resumo para a mensagem
-            resumo_clima = f"🌤️ {status_clima} ({pontos_clima}/4pts)"
-            resumo_tecnico = f"⚽ {pontos_tecnicos}/10pts"
+            resumo_clima = f" {status_clima} ({pontos_clima}/4pts)"
+            resumo_tecnico = f" {pontos_tecnicos}/10pts"
             
             msg = f"""⚽️ {veredito}
 🏟️ {jogo}
-🤖 OVERBOT VIP CLIMÁTICO
-
+🤖 OVERBOT VIP: {chr(10).join(resumo)}
 📊 ANÁLISE:
-{resumo_tecnico} | {resumo_clima}
+⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} 
+🌤️ CLIMA: {resumo_clima}
 🎯 Total: {pontos_total}/14pts
-
 ▶️ ENTRADA: {conclusao}
 ⏰ Aguardando resultado..."""
 
