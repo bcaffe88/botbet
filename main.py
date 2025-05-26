@@ -355,7 +355,7 @@ async def analisar(texto):
             
             msg = f"""⚽️ {veredito}
 🏟️ {jogo}
-🤖 OVERBOT VIP: {chr(10).join(resumo)}
+🤖 OVERBOT VIP
 📊 ANÁLISE:
 ⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} 
 🌤️ CLIMA: {resumo_clima}
