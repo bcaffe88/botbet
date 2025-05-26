@@ -393,4 +393,70 @@ async def escutar(event):
             
             if "OVER 0.5 HT" in conteudo:
                 logger.info("✅ Sinal OVER 0.5 HT detectado, enviando para análise")
-                await analisar(con
+                await analisar(conteudo)
+            else:
+                logger.debug("⚠️ Mensagem não contém sinal OVER 0.5 HT")
+        else:
+            logger.debug("⚠️ Mensagem de chat incorreto ou vazia")
+            
+    except Exception as e:
+        logger.error(f"Erro ao processar mensagem: {e}")
+
+# INICIALIZAÇÃO
+async def main():
+    """Função principal para iniciar ambos os serviços"""
+    app = None
+    try:
+        logger.info("🚀 Iniciando Bot de Sinais com Análise Climática")
+        logger.info(f"📍 Monitorando chat: {CHAT_ID_SINAL}")
+        logger.info(f"📍 Enviando para: {CHAT_ID_DESTINO}")
+        
+        # Inicializar aplicação Telegram Bot
+        app = ApplicationBuilder().token(BOT_TOKEN).build()
+        app.add_handler(CommandHandler("start", start))
+        
+        # Inicializar a aplicação do bot
+        await app.initialize()
+        await app.start()
+        logger.info("✅ Bot Telegram inicializado")
+        
+        # Inicializar cliente Telethon
+        await client.start()
+        me = await client.get_me()
+        logger.info(f"✅ Telethon conectado como: {me.first_name} (@{me.username})")
+        
+        # Iniciar o updater do bot em background
+        await app.updater.start_polling(drop_pending_updates=True)
+        logger.info("✅ Bot Telegram polling iniciado")
+        
+        # Manter o cliente Telethon rodando
+        logger.info("🔄 Serviços rodando... Pressione Ctrl+C para parar")
+        await client.run_until_disconnected()
+        
+    except KeyboardInterrupt:
+        logger.info("🛑 Aplicação interrompida pelo usuário")
+    except Exception as e:
+        logger.error(f"Erro fatal: {e}")
+    finally:
+        try:
+            if app and app.updater.running:
+                await app.updater.stop()
+                logger.info("📴 Bot polling parado")
+            if app:
+                await app.stop()
+                await app.shutdown()
+                logger.info("📴 Bot Telegram encerrado")
+            if client.is_connected():
+                await client.disconnect()
+                logger.info("📴 Telethon desconectado")
+        except Exception as cleanup_error:
+            logger.error(f"Erro no cleanup: {cleanup_error}")
+        logger.info("👋 Aplicação encerrada")
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("🛑 Interrompido pelo usuário")
+    except Exception as e:
+        logger.error(f"Erro na inicialização: {e}")
