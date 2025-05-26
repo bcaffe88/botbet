@@ -276,8 +276,6 @@ async def analisar(texto):
         if ia and ia >= 70:
             criterios_tecnicos.append("IA favorável")
             pontos_tecnicos += 2
-        resumo.append(f"{ia}%" if ia else "IA: N/A")
-
 
         # Critério minuto
         if minuto and 16 <= minuto <= 22:
