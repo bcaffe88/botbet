@@ -60,7 +60,7 @@ def analisar_clima(texto):
     try:
         # Expressão regular robusta com grupos nomeados
         clima_match = re.search(
-            r"🌡️\s*(?P<temp>[\d.]+)\s*°C\s*(?:\||-)?\s*☁\s*(?P<nuvens>[\d.]+)%\s*(?:\||-)?\s*💧\s*(?P<umidade>[\d.]+)%\s*(?:\||-)?\s*💨\s*(?P<vento>[\d.]+)\s*m/s",
+            r"🌡️\s*(?P<temp>[\d.]+)\s*°C\s*(?:\||-)?\s*☁️\s*(?P<nuvens>[\d.]+)%\s*(?:\||-)?\s*💧\s*(?P<umidade>[\d.]+)%\s*(?:\||-)?\s*💨\s*(?P<vento>[\d.]+)\s*m/s",
             texto,
             re.DOTALL
         )
