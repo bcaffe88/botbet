@@ -353,13 +353,10 @@ async def analisar(texto):
             
             msg = f"""⚽️ {veredito}
 🏟️ {jogo}
-🤖 OVERBOT VIP
-📊 ANÁLISE:
+🤖 OVERBOT ANÁLISE:
 ⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} 
 🌤️ CLIMA: {resumo_clima}
-🎯 Total: {pontos_total}/14pts
-▶️ ENTRADA: {conclusao}
-⏰ Aguardando resultado..."""
+▶️ ENTRADA: {conclusao}"""
 
             try:
                 msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
