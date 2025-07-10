@@ -336,13 +336,13 @@ async def analisar(texto):
         if deve_entrar:
             # Determinar nível de confiança
             if pontos_total >= 12:
-                confianca = "MUITO ALTA 🔥"
+                confianca = "MUITO ALTA 🔥 STAKE 1%"
             elif pontos_total >= 10:
-                confianca = "ALTA ✅"
+                confianca = "ALTA ✅ STAKE 0.75%"
             elif pontos_clima >= 3:
-                confianca = "MÉDIA-ALTA ⚡"
+                confianca = "MÉDIA-ALTA ⚡ STAKE 0.5%"
             else:
-                confianca = "MÉDIA ⚠️"
+                confianca = "MÉDIA ⚠️ STAKE 0.25%"
             
             veredito = f"ENTRAR | CONFIANÇA: {confianca}"
             conclusao = "OVER 0.5 HT"
