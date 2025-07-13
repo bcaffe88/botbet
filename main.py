@@ -89,7 +89,7 @@ def analisar_clima(texto):
     logger.info("🌤️ Iniciando análise climática...")
     try:
         temp_match = re.search(r"🌡️\s*([\d.]+)\s*°C", texto)
-        nuvens_match = re.search(r"☁️\s*([\d.]+)%", texto) # Corrigido para emoji de nuvem simples
+        nuvens_match = re.search(r"☁️\s*([\d.]+)%", texto)
         umidade_match = re.search(r"💧\s*([\d.]+)%", texto)
         vento_match = re.search(r"💨\s*([\d.]+)\s*m/s", texto)
 
@@ -133,39 +133,23 @@ def analisar_clima(texto):
     return pontos_clima, criterios_clima, status_clima
 
 async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
-    """
-    Busca o fixture_id e a odd para Over 0.5 HT de um jogo.
-    Esta versão é robusta: busca todos os mercados e encontra o correto pelo nome,
-    em vez de depender de um ID de mercado fixo.
-    """
     odd_ht = "N/D"
     fixture_id = await buscar_fixture_id(nome_jogo)
-
     if not fixture_id:
         return "N/L", None
-
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
     url_odds = "https://v3.football.api-sports.io/odds"
-    # ATUALIZAÇÃO: Não pedimos mais um 'market' específico, vamos pegar todos.
     params = {"fixture": str(fixture_id), "bookmaker": "8"}
-    
     logger.info(f"🔎 Buscando TODOS os mercados para Fixture ID: {fixture_id} | Bookmaker: 8")
-
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url_odds, headers=headers, params=params) as resp_odds:
                 if resp_odds.status == 200:
                     data_odds = await resp_odds.json()
-                    
-                    # Log para depuração futura, se necessário
-                    # logger.info(f"📦 Resposta completa da API de Odds: {data_odds}")
-
                     if data_odds.get('results', 0) > 0 and data_odds.get('response'):
                         bookmaker_data = data_odds['response'][0].get('bookmakers', [])
                         if bookmaker_data:
-                            # Itera por todos os mercados que o bookmaker oferece para este jogo
                             for market in bookmaker_data[0].get('bets', []):
-                                # Procuramos o mercado pelo nome exato
                                 if market.get('name') == 'Over/Under First Half':
                                     logger.info("✅ Mercado 'Over/Under First Half' encontrado!")
                                     values = market.get('values', [])
@@ -173,14 +157,9 @@ async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
                                         if value.get('value') == 'Over 0.5':
                                             odd_ht = value.get('odd', 'N/D')
                                             logger.info(f"✅ ODD ENCONTRADA: {odd_ht}")
-                                            # Interrompe ambos os loops assim que encontrar a odd
                                             return odd_ht, fixture_id
-                                    
-                                    # Se encontrou o mercado mas não a linha 0.5
                                     logger.warning("⚠️ Mercado 'Over/Under First Half' encontrado, mas a linha específica 'Over 0.5' não estava disponível.")
                                     return odd_ht, fixture_id
-                            
-                            # Se o loop terminar sem encontrar o mercado
                             logger.warning("⚠️ Nenhum mercado com o nome 'Over/Under First Half' foi encontrado na resposta da API.")
                         else:
                             logger.warning("⚠️ A API retornou uma resposta, mas sem dados do bookmaker (ID 8).")
@@ -192,17 +171,18 @@ async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
     except Exception as e:
         logger.error(f"❌ Erro crítico em buscar_odd_ht: {e}")
         return "ERRO", fixture_id
-        
     return odd_ht, fixture_id
 
-
+# --- FUNÇÃO DE VEREDITO (0.5 HT) CORRIGIDA ---
 async def tarefa_veredito_por_id(fixture_id, msg_original):
+    resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"
     try:
-        logger.info(f"⏰ Aguardando 35 minutos para veredito (0.5 HT) do fixture ID: {fixture_id}")
-        await asyncio.sleep(2100)
+        logger.info(f"⏰ [0.5 HT] Aguardando 35 min para veredito do fixture ID: {fixture_id}")
+        await asyncio.sleep(2100) # 35 minutos
+        
         headers = {"x-apisports-key": FOOTBALL_API_KEY}
         url = f"https://v3.football.api-sports.io/fixtures?id={fixture_id}"
-        resultado = "⏳ RESULTADO NÃO LOCALIZADO"
+        
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as resp:
                 if resp.status == 200:
@@ -211,14 +191,39 @@ async def tarefa_veredito_por_id(fixture_id, msg_original):
                         fixture = data['response'][0]
                         gols_casa = fixture.get('score', {}).get('halftime', {}).get('home')
                         gols_fora = fixture.get('score', {}).get('halftime', {}).get('away')
-                        gols_ht = (gols_casa or 0) + (gols_fora or 0)
-                        resultado = "✅ BATEU" if gols_ht >= 1 else "❌ NÃO BATEU"
-        resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅" if resultado == "✅ BATEU" else "R E D ❌" if resultado == "❌ NÃO BATEU" else resultado
-        novo_texto = f"{msg_original.text}\n\n───────────────\n{resultado_final}"
-        await bot.edit_message_text(chat_id=CHAT_ID_DESTINO, message_id=msg_original.message_id, text=novo_texto, parse_mode='Markdown')
-        logger.info(f"✅ Veredito (0.5 HT) atualizado para o fixture ID: {fixture_id}")
+                        
+                        # Verifica se os dados de gol são válidos (não são None)
+                        if gols_casa is not None and gols_fora is not None:
+                            gols_ht = gols_casa + gols_fora
+                            logger.info(f"📊 [0.5 HT] Veredito para {fixture_id}: {gols_ht} gols no HT")
+                            resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅" if gols_ht >= 1 else "R E D ❌"
+                        else:
+                            logger.warning(f"⚠️ [0.5 HT] Dados de gols no HT indisponíveis para fixture {fixture_id}. O jogo pode não ter terminado o 1º tempo.")
+                    else:
+                        logger.warning(f"⚠️ [0.5 HT] API não retornou dados para fixture {fixture_id} na verificação.")
+                else:
+                    logger.error(f"❌ [0.5 HT] Erro na API ao buscar veredito para {fixture_id}: Status {resp.status}")
+                    resultado_final = "⏳ ERRO NA API"
+    except asyncio.CancelledError:
+        logger.info(f"Tarefa de veredito (0.5 HT) para fixture {fixture_id} foi cancelada.")
+        raise # Propaga o cancelamento para não editar a mensagem
     except Exception as e:
-        logger.error(f"Erro na tarefa de veredito (0.5 HT): {e}")
+        logger.error(f"❌ [0.5 HT] Erro crítico na tarefa de veredito para fixture {fixture_id}: {e}")
+        resultado_final = "⏳ ERRO AO VERIFICAR"
+    finally:
+        # Este bloco será executado SEMPRE, exceto se a tarefa for cancelada
+        if not asyncio.current_task().cancelled():
+            logger.info(f"✅ [0.5 HT] Editando mensagem para fixture {fixture_id} com resultado: {resultado_final}")
+            novo_texto = f"{msg_original.text}\n\n───────────────\n{resultado_final}"
+            try:
+                await bot.edit_message_text(
+                    chat_id=CHAT_ID_DESTINO,
+                    message_id=msg_original.message_id,
+                    text=novo_texto,
+                    parse_mode='Markdown'
+                )
+            except Exception as edit_error:
+                logger.error(f"❌ Falha ao editar mensagem para fixture {fixture_id}: {edit_error}")
 
 async def analisar(texto):
     logger.info("📊 Iniciando análise do sinal 'Over 0.5 HT'")
@@ -273,7 +278,7 @@ async def analisar(texto):
             elif pontos_clima >= 3: confianca = "MÉDIA-ALTA ⚡ STAKE 0.5%"
             else: confianca = "MÉDIA ⚠️ STAKE 0.25%"
             
-            veredito = f"ENTRAR | CONFIANÇA: {confianca}" # CORRIGIDO
+            veredito = f"ENTRAR | CONFIANÇA: {confianca}"
             resumo_clima = f" {status_clima} ({pontos_clima}/4pts)"
             resumo_tecnico = f" {pontos_tecnicos}/10pts"
             
@@ -289,6 +294,8 @@ async def analisar(texto):
             logger.info(f"✅ Sinal 'Over 0.5 HT' enviado para: {jogo}")
             if fixture_id:
                 asyncio.create_task(tarefa_veredito_por_id(fixture_id, msg_enviada))
+            else:
+                logger.warning(f"Veredito não agendado para '{jogo}' pois o fixture ID não foi encontrado.")
         else:
             logger.info(f"❌ Critérios insuficientes para 'Over 0.5 HT' em {jogo}.")
     except Exception as e:
@@ -296,13 +303,16 @@ async def analisar(texto):
 
 # --- Funções do Bot 2 ((CT) Over Gol) ---
 
+# --- FUNÇÃO DE VEREDITO (CT) CORRIGIDA ---
 async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
+    resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"
     try:
-        logger.info(f"⏰ Aguardando 45 minutos para veredito (CT Over {goal_line}) do fixture ID: {fixture_id}")
-        await asyncio.sleep(2700)
+        logger.info(f"⏰ [CT Over {goal_line}] Aguardando 45 min para veredito do fixture ID: {fixture_id}")
+        await asyncio.sleep(2700) # 45 minutos
+        
         headers = {"x-apisports-key": FOOTBALL_API_KEY}
         url = f"https://v3.football.api-sports.io/fixtures?id={fixture_id}"
-        resultado = "⏳ RESULTADO NÃO LOCALIZADO"
+        
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as resp:
                 if resp.status == 200:
@@ -311,55 +321,65 @@ async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
                         fixture = data['response'][0]
                         gols_casa = fixture.get('score', {}).get('fulltime', {}).get('home')
                         gols_fora = fixture.get('score', {}).get('fulltime', {}).get('away')
+
                         if gols_casa is not None and gols_fora is not None:
                             total_gols = gols_casa + gols_fora
-                            logger.info(f"📊 Veredito para {fixture_id}: Total de Gols={total_gols}, Linha > {goal_line}")
-                            resultado = "✅ BATEU" if total_gols > goal_line else "❌ NÃO BATEU"
-        resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅" if resultado == "✅ BATEU" else "R E D ❌" if resultado == "❌ NÃO BATEU" else resultado
-        novo_texto = f"{msg_original.text}\n\n───────────────\n{resultado_final}"
-        await bot.edit_message_text(chat_id=CHAT_ID_DESTINO, message_id=msg_original.message_id, text=novo_texto)
-        logger.info(f"✅ Veredito (CT) atualizado para o fixture ID: {fixture_id}")
+                            logger.info(f"📊 [CT Over {goal_line}] Veredito para {fixture_id}: Total de Gols={total_gols}")
+                            resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅" if total_gols > goal_line else "R E D ❌"
+                        else:
+                             logger.warning(f"⚠️ [CT Over {goal_line}] Dados de gols FT indisponíveis para fixture {fixture_id}. O jogo pode não ter terminado.")
+                    else:
+                        logger.warning(f"⚠️ [CT Over {goal_line}] API não retornou dados para fixture {fixture_id} na verificação.")
+                else:
+                    logger.error(f"❌ [CT Over {goal_line}] Erro na API ao buscar veredito para {fixture_id}: Status {resp.status}")
+                    resultado_final = "⏳ ERRO NA API"
+    except asyncio.CancelledError:
+        logger.info(f"Tarefa de veredito (CT) para fixture {fixture_id} foi cancelada.")
+        raise # Propaga o cancelamento para não editar a mensagem
     except Exception as e:
-        logger.error(f"Erro na tarefa de veredito (CT): {e}")
+        logger.error(f"❌ [CT Over {goal_line}] Erro crítico na tarefa de veredito para fixture {fixture_id}: {e}")
+        resultado_final = "⏳ ERRO AO VERIFICAR"
+    finally:
+        # Este bloco será executado SEMPRE, exceto se a tarefa for cancelada
+        if not asyncio.current_task().cancelled():
+            logger.info(f"✅ [CT Over {goal_line}] Editando mensagem para fixture {fixture_id} com resultado: {resultado_final}")
+            novo_texto = f"{msg_original.text}\n\n───────────────\n{resultado_final}"
+            try:
+                await bot.edit_message_text(
+                    chat_id=CHAT_ID_DESTINO,
+                    message_id=msg_original.message_id,
+                    text=novo_texto
+                )
+            except Exception as edit_error:
+                logger.error(f"❌ Falha ao editar mensagem (CT) para fixture {fixture_id}: {edit_error}")
 
-# --- VERSÃO CORRIGIDA E ROBUSTA DA FUNÇÃO ---
 async def processar_sinal_ct(texto_original):
-    """Extrai, formata e encaminha o sinal (CT) Over Gol de forma robusta."""
     logger.info("(CT) Over Gol: Iniciando processamento do sinal.")
     try:
-        # Extrair cada campo individualmente para resiliência
         evento_match = re.search(r"Evento:\s*(.+)", texto_original)
         selecao_match = re.search(r"Seleção:\s*(.+)", texto_original)
         
-        # Validações essenciais
-        if not evento_match:
-            logger.warning("❌ Sinal (CT) não contém o campo 'Evento:'. Abortando.")
-            return
-        if not selecao_match:
-            logger.warning("❌ Sinal (CT) não contém o campo 'Seleção:'. Abortando.")
+        if not evento_match or not selecao_match:
+            logger.warning("Sinal (CT) sem 'Evento' ou 'Seleção'. Abortando.")
             return
 
         evento = evento_match.group(1).strip()
-        selecao_texto = selecao_match.group(1).strip().split('|')[0].strip() # Pega só o texto antes do |
+        selecao_texto = selecao_match.group(1).strip().split('|')[0].strip()
 
-        # Extração dinâmica da linha de gol
         goal_line_match = re.search(r"([\d.]+)", selecao_texto)
         if not goal_line_match:
-            logger.warning(f"❌ Não foi possível extrair a linha de gol da seleção: '{selecao_texto}'. Abortando.")
+            logger.warning(f"Não foi possível extrair a linha de gol da seleção: '{selecao_texto}'. Abortando.")
             return
         goal_line = float(goal_line_match.group(1))
         
         logger.info(f"✅ (CT) Evento: '{evento}' | Seleção: '{selecao_texto}' | Linha de Gol: {goal_line}")
 
-        # Extração dos outros campos (opcionais na formatação)
         competicao_match = re.search(r"Competição:\s*(.+)", texto_original)
         mercado_match = re.search(r"Mercado:\s*(.+)", texto_original)
         stake_match = re.search(r"Stake:\s*(.+)", texto_original)
         odd_match = re.search(r"Odd:\s*(.+)", texto_original)
         tipo_match = re.search(r"Tipo:\s*(.+)", texto_original)
         estrategia_match = re.search(r"Estratégia:\s*(.+)", texto_original)
-
-        # Limpa o ID do mercado, se ele existir
         mercado_texto = mercado_match.group(1).strip().split('|')[0].strip() if mercado_match else "N/A"
 
         msg_formatada = f"""ANÁLISE OVERBOT VIP CT
@@ -392,31 +412,23 @@ client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 
 @client.on(events.NewMessage(chats=CHAT_ID_SINAL))
 async def roteador_de_sinais(event):
-    """Monitora o canal e direciona a mensagem para a função correta."""
     try:
         conteudo = event.message.message
         if not conteudo:
             return
-
-        # Rota para o sinal de análise complexa (Over 0.5 HT)
         if "OVER 0.5 HT" in conteudo and "Inteligência Artificial" in conteudo:
             logger.info("Sinal 'OVER 0.5 HT' detectado. Roteando para análise principal.")
             await analisar(conteudo)
-            
-        # Rota para o sinal '(CT) Over Gol'
         elif "Estratégia: (CT) Over Gol" in conteudo:
             logger.info("Sinal '(CT) Over Gol' detectado. Roteando para processador CT.")
             await processar_sinal_ct(conteudo)
-            
     except Exception as e:
         logger.error(f"Erro no roteador de sinais: {e}")
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Comando de inicialização do bot para verificação."""
     await update.message.reply_text("🤖 Bot Unificado de Sinais ativo e escutando!")
 
 async def main():
-    """Função principal para iniciar todos os serviços."""
     try:
         logger.info("🚀 Iniciando Bot Unificado de Sinais")
         logger.info(f"📍 Monitorando chat: {CHAT_ID_SINAL}")
