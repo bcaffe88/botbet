@@ -34,7 +34,7 @@ try:
 except ValueError as e:
     raise ValueError(f"Erro ao converter variáveis numéricas: {e}")
 
-# Inicializar bot (um único bot para tudo)
+# Inicializar bot
 bot = Bot(token=BOT_TOKEN)
 
 # --- Funções Utilitárias Comuns ---
@@ -47,15 +47,12 @@ def similaridade(a, b):
     return SequenceMatcher(None, normalizar(a), normalizar(b)).ratio()
 
 async def buscar_fixture_id(nome_jogo: str) -> int | None:
-    """Busca o fixture_id de um jogo pelo nome na API-Football."""
     if not nome_jogo or not FOOTBALL_API_KEY:
         return None
-
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
     data_hoje = datetime.now().strftime("%Y-%m-%d")
     url_fixtures = f"https://v3.football.api-sports.io/fixtures?date={data_hoje}"
     fixture_id = None
-    
     try:
         timeout = aiohttp.ClientTimeout(total=15)
         async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -63,22 +60,18 @@ async def buscar_fixture_id(nome_jogo: str) -> int | None:
                 if resp.status != 200:
                     logger.error(f"Erro ao buscar fixtures: Status {resp.status}")
                     return None
-                
                 data = await resp.json()
                 jogos = data.get("response", [])
-                
                 maior_similaridade = 0.75
                 for item in jogos:
                     teams = item.get("teams", {})
                     casa = teams.get("home", {}).get("name", "")
                     fora = teams.get("away", {}).get("name", "")
                     nome_match_api = f"{casa} x {fora}"
-                    
                     sim = similaridade(nome_jogo, nome_match_api)
                     if sim > maior_similaridade:
                         maior_similaridade = sim
                         fixture_id = item.get("fixture", {}).get("id")
-                
                 if fixture_id:
                     logger.info(f"🔍 Fixture encontrado para '{nome_jogo}': ID {fixture_id} (Similaridade: {maior_similaridade:.2f})")
                 else:
@@ -86,20 +79,17 @@ async def buscar_fixture_id(nome_jogo: str) -> int | None:
     except Exception as e:
         logger.error(f"Erro em buscar_fixture_id: {e}")
         return None
-        
     return fixture_id
 
 # --- Funções do Bot 1 (Análise Climática) ---
 
 def analisar_clima(texto):
-    """Analisa condições climáticas individualmente para maior robustez e retorna pontuação."""
     pontos_clima = 0
     criterios_clima = []
-    
     logger.info("🌤️ Iniciando análise climática...")
     try:
         temp_match = re.search(r"🌡️\s*([\d.]+)\s*°C", texto)
-        nuvens_match = re.search(r"☁️\s*([\d.]+)%", texto)
+        nuvens_match = re.search(r"☁️\s*([\d.]+)%", texto) # Corrigido para emoji de nuvem simples
         umidade_match = re.search(r"💧\s*([\d.]+)%", texto)
         vento_match = re.search(r"💨\s*([\d.]+)\s*m/s", texto)
 
@@ -143,13 +133,10 @@ def analisar_clima(texto):
     return pontos_clima, criterios_clima, status_clima
 
 async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
-    """Busca o fixture_id e a odd para Over 0.5 HT de um jogo."""
     odd_ht = "N/D"
     fixture_id = await buscar_fixture_id(nome_jogo)
-
     if not fixture_id:
         return "N/L", None
-
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
     url_odds = "https://v3.football.api-sports.io/odds"
     params = {"fixture": str(fixture_id), "market": "145", "bookmaker": "8"}
@@ -175,7 +162,6 @@ async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
     return odd_ht, fixture_id
 
 async def tarefa_veredito_por_id(fixture_id, msg_original):
-    """Executa verificação do resultado (Over 0.5 HT) após 35 minutos usando o ID."""
     try:
         logger.info(f"⏰ Aguardando 35 minutos para veredito (0.5 HT) do fixture ID: {fixture_id}")
         await asyncio.sleep(2100)
@@ -200,7 +186,6 @@ async def tarefa_veredito_por_id(fixture_id, msg_original):
         logger.error(f"Erro na tarefa de veredito (0.5 HT): {e}")
 
 async def analisar(texto):
-    """Função de análise principal completa para sinais 'Over 0.5 HT'."""
     logger.info("📊 Iniciando análise do sinal 'Over 0.5 HT'")
     try:
         jogo_match = re.search(r'⚽️\s*(.+)', texto)
@@ -253,7 +238,7 @@ async def analisar(texto):
             elif pontos_clima >= 3: confianca = "MÉDIA-ALTA ⚡ STAKE 0.5%"
             else: confianca = "MÉDIA ⚠️ STAKE 0.25%"
             
-            veredito = f"CONFIANÇA: {confianca}"
+            veredito = f"ENTRAR | CONFIANÇA: {confianca}" # CORRIGIDO
             resumo_clima = f" {status_clima} ({pontos_clima}/4pts)"
             resumo_tecnico = f" {pontos_tecnicos}/10pts"
             
@@ -277,7 +262,6 @@ async def analisar(texto):
 # --- Funções do Bot 2 ((CT) Over Gol) ---
 
 async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
-    """Verifica o resultado final (Over X.5) de um jogo após 45 minutos."""
     try:
         logger.info(f"⏰ Aguardando 45 minutos para veredito (CT Over {goal_line}) do fixture ID: {fixture_id}")
         await asyncio.sleep(2700)
@@ -303,40 +287,51 @@ async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
     except Exception as e:
         logger.error(f"Erro na tarefa de veredito (CT): {e}")
 
+# --- VERSÃO CORRIGIDA E ROBUSTA DA FUNÇÃO ---
 async def processar_sinal_ct(texto_original):
-    """Extrai, formata e encaminha o sinal (CT) Over Gol."""
+    """Extrai, formata e encaminha o sinal (CT) Over Gol de forma robusta."""
     logger.info("(CT) Over Gol: Iniciando processamento do sinal.")
     try:
+        # Extrair cada campo individualmente para resiliência
         evento_match = re.search(r"Evento:\s*(.+)", texto_original)
-        selecao_match = re.search(r"Seleção:\s*(.+?)\s*\|", texto_original)
+        selecao_match = re.search(r"Seleção:\s*(.+)", texto_original)
         
-        if not evento_match or not selecao_match:
-            logger.warning("Sinal (CT) sem 'Evento' ou 'Seleção'. Abortando.")
+        # Validações essenciais
+        if not evento_match:
+            logger.warning("❌ Sinal (CT) não contém o campo 'Evento:'. Abortando.")
+            return
+        if not selecao_match:
+            logger.warning("❌ Sinal (CT) não contém o campo 'Seleção:'. Abortando.")
             return
 
         evento = evento_match.group(1).strip()
-        selecao_texto = selecao_match.group(1).strip()
+        selecao_texto = selecao_match.group(1).strip().split('|')[0].strip() # Pega só o texto antes do |
 
         # Extração dinâmica da linha de gol
         goal_line_match = re.search(r"([\d.]+)", selecao_texto)
         if not goal_line_match:
-            logger.warning(f"Não foi possível extrair a linha de gol da seleção: '{selecao_texto}'. Abortando.")
+            logger.warning(f"❌ Não foi possível extrair a linha de gol da seleção: '{selecao_texto}'. Abortando.")
             return
         goal_line = float(goal_line_match.group(1))
+        
+        logger.info(f"✅ (CT) Evento: '{evento}' | Seleção: '{selecao_texto}' | Linha de Gol: {goal_line}")
 
-        # Extração dos outros campos (são opcionais na formatação)
+        # Extração dos outros campos (opcionais na formatação)
         competicao_match = re.search(r"Competição:\s*(.+)", texto_original)
-        mercado_match = re.search(r"Mercado:\s*(.+?)\s*\|", texto_original)
+        mercado_match = re.search(r"Mercado:\s*(.+)", texto_original)
         stake_match = re.search(r"Stake:\s*(.+)", texto_original)
         odd_match = re.search(r"Odd:\s*(.+)", texto_original)
         tipo_match = re.search(r"Tipo:\s*(.+)", texto_original)
         estrategia_match = re.search(r"Estratégia:\s*(.+)", texto_original)
 
+        # Limpa o ID do mercado, se ele existir
+        mercado_texto = mercado_match.group(1).strip().split('|')[0].strip() if mercado_match else "N/A"
+
         msg_formatada = f"""ANÁLISE OVERBOT VIP CT
 Evento: {evento}
 Competição: {competicao_match.group(1).strip() if competicao_match else 'N/A'}
 
-Mercado: {mercado_match.group(1).strip() if mercado_match else 'N/A'}
+Mercado: {mercado_texto}
 Seleção: {selecao_texto}
 Stake: {stake_match.group(1).strip() if stake_match else 'N/A'}
 Odd: {odd_match.group(1).strip() if odd_match else 'N/A'}
@@ -352,6 +347,7 @@ Estratégia: {estrategia_match.group(1).strip() if estrategia_match else 'N/A'}"
             asyncio.create_task(verificar_resultado_final_ct(fixture_id, msg_enviada, goal_line))
         else:
             logger.warning(f"Não foi possível agendar o veredito para '{evento}' pois o fixture ID não foi encontrado.")
+            
     except Exception as e:
         logger.error(f"Erro ao processar sinal (CT): {e}")
 
