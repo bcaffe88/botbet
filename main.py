@@ -116,7 +116,7 @@ def analisar_clima(texto):
     logger.info("🌤️ Iniciando análise climática...")
     try:
         temp_match = re.search(r"🌡️\s*([\d.]+)\s*°C", texto)
-        nuvens_match = re.search(r"☁️\s*([\d.]+)%", texto)
+        nuvens_match = re.search(r"☁\s*([\d.]+)%", texto)
         umidade_match = re.search(r"💧\s*([\d.]+)%", texto)
         vento_match = re.search(r"💨\s*([\d.]+)\s*m/s", texto)
 
