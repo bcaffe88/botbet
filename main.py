@@ -47,11 +47,26 @@ def similaridade(a, b):
     return SequenceMatcher(None, normalizar(a), normalizar(b)).ratio()
 
 async def buscar_fixture_id(nome_jogo: str) -> int | None:
+    """
+    Busca o fixture_id de um jogo de forma inteligente, usando o parâmetro 'search' da API.
+    """
     if not nome_jogo or not FOOTBALL_API_KEY:
         return None
+
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
     data_hoje = datetime.now().strftime("%Y-%m-%d")
-    url_fixtures = f"https://v3.football.api-sports.io/fixtures?date={data_hoje}"
+    
+    # Pega o primeiro time do nome para usar na busca. É mais eficiente que buscar o nome completo.
+    try:
+        time_busca = nome_jogo.split(' x ')[0].strip()
+    except Exception:
+        time_busca = nome_jogo # Fallback caso o nome não tenha ' x '
+
+    # ATUALIZAÇÃO: Usamos o parâmetro 'search' para uma busca mais precisa
+    url_fixtures = f"https://v3.football.api-sports.io/fixtures?date={data_hoje}&search={time_busca}"
+    
+    logger.info(f"🔎 Buscando fixture com data={data_hoje} e search='{time_busca}'")
+
     fixture_id = None
     try:
         timeout = aiohttp.ClientTimeout(total=15)
@@ -60,25 +75,37 @@ async def buscar_fixture_id(nome_jogo: str) -> int | None:
                 if resp.status != 200:
                     logger.error(f"Erro ao buscar fixtures: Status {resp.status}")
                     return None
+                
                 data = await resp.json()
+                
+                if not data.get("response"):
+                    logger.warning(f"A busca por '{time_busca}' não retornou nenhum jogo para hoje.")
+                    return None
+
                 jogos = data.get("response", [])
-                maior_similaridade = 0.75
+                logger.info(f"API retornou {len(jogos)} jogo(s) para a busca '{time_busca}'")
+
+                maior_similaridade = 0.75 # Mantemos o cálculo de similaridade para garantir que é o jogo certo
                 for item in jogos:
                     teams = item.get("teams", {})
                     casa = teams.get("home", {}).get("name", "")
                     fora = teams.get("away", {}).get("name", "")
                     nome_match_api = f"{casa} x {fora}"
+                    
                     sim = similaridade(nome_jogo, nome_match_api)
                     if sim > maior_similaridade:
                         maior_similaridade = sim
                         fixture_id = item.get("fixture", {}).get("id")
+                
                 if fixture_id:
-                    logger.info(f"🔍 Fixture encontrado para '{nome_jogo}': ID {fixture_id} (Similaridade: {maior_similaridade:.2f})")
+                    logger.info(f"✅ Fixture encontrado para '{nome_jogo}': ID {fixture_id} (Similaridade: {maior_similaridade:.2f})")
                 else:
-                    logger.warning(f"Fixture não localizado para '{nome_jogo}'")
+                    logger.warning(f"Fixture não localizado para '{nome_jogo}' nos {len(jogos)} resultados da busca.")
+
     except Exception as e:
         logger.error(f"Erro em buscar_fixture_id: {e}")
         return None
+        
     return fixture_id
 
 # --- Funções do Bot 1 (Análise Climática) ---
