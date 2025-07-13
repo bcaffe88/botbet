@@ -133,32 +133,56 @@ def analisar_clima(texto):
     return pontos_clima, criterios_clima, status_clima
 
 async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
+    """Busca o fixture_id e a odd para Over 0.5 HT de um jogo com logging detalhado."""
     odd_ht = "N/D"
     fixture_id = await buscar_fixture_id(nome_jogo)
+
     if not fixture_id:
-        return "N/L", None
+        return "N/L", None # Retorna 'Não Localizado' se o fixture não for encontrado
+
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
     url_odds = "https://v3.football.api-sports.io/odds"
-    params = {"fixture": str(fixture_id), "market": "145", "bookmaker": "8"}
+    params = {"fixture": str(fixture_id), "market": "145", "bookmaker": "8"} # Market 145 = Over/Under HT
+    
+    logger.info(f"🔎 Buscando odds para Fixture ID: {fixture_id} | Mercado: 145 | Bookmaker: 8")
+
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url_odds, headers=headers, params=params) as resp_odds:
                 if resp_odds.status == 200:
                     data_odds = await resp_odds.json()
+                    
+                    # LOG DE DEPURAÇÃO: Imprime a resposta completa da API para análise
+                    logger.info(f"📦 Resposta completa da API de Odds: {data_odds}")
+
                     if data_odds.get('results', 0) > 0 and data_odds.get('response'):
-                        bets = data_odds['response'][0].get('bookmakers', [{}])[0].get('bets', [])
-                        if bets and bets[0].get('name') == 'Over/Under First Half':
-                             for value in bets[0].get('values', []):
-                                if value.get('value') == 'Over 0.5':
-                                    odd_ht = value.get('odd', 'N/D')
-                                    logger.info(f"📊 Odd encontrada para Over 0.5 HT: {odd_ht}")
-                                    break
+                        bookmaker_data = data_odds['response'][0].get('bookmakers', [])
+                        if bookmaker_data:
+                            bets = bookmaker_data[0].get('bets', [])
+                            if bets and bets[0].get('name') == 'Over/Under First Half':
+                                values = bets[0].get('values', [])
+                                for value in values:
+                                    if value.get('value') == 'Over 0.5':
+                                        odd_ht = value.get('odd', 'N/D')
+                                        logger.info(f"✅ ODD ENCONTRADA: {odd_ht}")
+                                        break # Para o loop assim que encontrar a odd
+                                
+                                # Se o loop terminar e a odd continuar "N/D"
+                                if odd_ht == "N/D":
+                                    logger.warning("⚠️ Mercado 'Over/Under First Half' encontrado, mas a linha específica 'Over 0.5' não estava disponível.")
+                            else:
+                                logger.warning("⚠️ Bookmaker encontrado, mas o mercado 'Over/Under First Half' (ID 145) não foi retornado.")
+                        else:
+                            logger.warning("⚠️ A API retornou uma resposta, mas sem dados do bookmaker (ID 8).")
+                    else:
+                        logger.warning(f"⚠️ A API não retornou nenhuma odd para o fixture {fixture_id}. (results: 0)")
                 else:
-                    logger.error(f"Erro ao buscar odds: Status {resp_odds.status}")
+                    logger.error(f"❌ Erro na API de Odds: Status {resp_odds.status}")
                     return "API_ERR_ODD", fixture_id
     except Exception as e:
-        logger.error(f"Erro em buscar_odd_ht: {e}")
+        logger.error(f"❌ Erro crítico em buscar_odd_ht: {e}")
         return "ERRO", fixture_id
+        
     return odd_ht, fixture_id
 
 async def tarefa_veredito_por_id(fixture_id, msg_original):
