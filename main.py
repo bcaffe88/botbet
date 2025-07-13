@@ -125,7 +125,86 @@ def analisar_clima(texto):
 
     return pontos_clima, criterios_clima, detalhes_clima, status_clima
 
-# API-FOOTBALL - Verifica gol no HT
+# NOVA FUNÇÃO PARA BUSCAR FIXTURE ID E ODD
+async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
+    """Busca o fixture_id e a odd para Over 0.5 HT de um jogo."""
+    if not nome_jogo or not FOOTBALL_API_KEY:
+        return "N/D", None
+
+    headers = {"x-apisports-key": FOOTBALL_API_KEY}
+    data_hoje = datetime.now().strftime("%Y-%m-%d")
+    
+    fixture_id = None
+    odd_ht = "N/D"
+
+    try:
+        timeout = aiohttp.ClientTimeout(total=15)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            
+            # --- PASSO 1: Encontrar o Fixture ID pelo nome do jogo ---
+            url_fixtures = f"https://v3.football.api-sports.io/fixtures?date={data_hoje}"
+            async with session.get(url_fixtures, headers=headers) as resp:
+                if resp.status != 200:
+                    logger.error(f"Erro ao buscar fixtures: Status {resp.status}")
+                    return "API_ERR", None
+                
+                data = await resp.json()
+                jogos = data.get("response", [])
+                
+                melhor_match = None
+                maior_similaridade = 0.75 # Limite mínimo de similaridade
+
+                for item in jogos:
+                    teams = item.get("teams", {})
+                    casa = teams.get("home", {}).get("name", "")
+                    fora = teams.get("away", {}).get("name", "")
+                    nome_match_api = f"{casa} x {fora}"
+                    
+                    sim = similaridade(nome_jogo, nome_match_api)
+                    if sim > maior_similaridade:
+                        maior_similaridade = sim
+                        melhor_match = item
+                
+                if melhor_match:
+                    fixture_id = melhor_match.get("fixture", {}).get("id")
+                    logger.info(f"🔍 Fixture encontrado para '{nome_jogo}': ID {fixture_id} (Similaridade: {maior_similaridade:.2f})")
+                else:
+                    logger.warning(f"Fixture não localizado para '{nome_jogo}' com similaridade > {maior_similaridade}")
+                    return "N/L", None
+
+            # --- PASSO 2: Com o Fixture ID, buscar a Odd ---
+            if fixture_id:
+                url_odds = "https://v3.football.api-sports.io/odds"
+                params = {
+                    "fixture": str(fixture_id),
+                    "market": "145",  # ID do mercado "Over/Under First Half Goals"
+                    "bookmaker": "8"  # ID da Bet365, uma referência comum
+                }
+                async with session.get(url_odds, headers=headers, params=params) as resp_odds:
+                    if resp_odds.status != 200:
+                        logger.error(f"Erro ao buscar odds: Status {resp_odds.status}")
+                        return "API_ERR_ODD", fixture_id
+
+                    data_odds = await resp_odds.json()
+                    
+                    if data_odds.get('results', 0) > 0 and data_odds.get('response'):
+                        bets = data_odds['response'][0].get('bookmakers', [{}])[0].get('bets', [])
+                        if bets and bets[0].get('name') == 'Over/Under First Half':
+                             for value in bets[0].get('values', []):
+                                if value.get('value') == 'Over 0.5':
+                                    odd_ht = value.get('odd', 'N/D')
+                                    logger.info(f"📊 Odd encontrada para Over 0.5 HT: {odd_ht}")
+                                    break
+    except asyncio.TimeoutError:
+        logger.error("Timeout na busca de odds")
+        return "TIMEOUT", None
+    except Exception as e:
+        logger.error(f"Erro em buscar_odd_ht: {e}")
+        return "ERRO", None
+        
+    return odd_ht, fixture_id
+
+# API-FOOTBALL - Verifica gol no HT (Fallback)
 async def verificar_gol_ht(nome_jogo):
     """Verifica se houve gol no primeiro tempo através da API Football"""
     if not nome_jogo or not FOOTBALL_API_KEY:
@@ -197,7 +276,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Erro no comando /start: {e}")
 
-# Tarefa de veredito após 35 minutos (2100 segundos)
+# Tarefa de veredito após 35 minutos (Fallback)
 async def tarefa_veredito(jogo, msg_original):
     """Executa verificação do resultado após 35 minutos"""
     try:
@@ -222,12 +301,59 @@ async def tarefa_veredito(jogo, msg_original):
         await bot.edit_message_text(
             chat_id=CHAT_ID_DESTINO,
             message_id=msg_original.message_id,
-            text=novo_texto
+            text=novo_texto,
+            parse_mode='Markdown'
         )
         logger.info(f"✅ Veredito atualizado para: {jogo}")
         
     except Exception as e:
         logger.error(f"Erro na tarefa de veredito: {e}")
+
+# NOVA TAREFA DE VEREDITO OTIMIZADA USANDO FIXTURE ID
+async def tarefa_veredito_por_id(fixture_id, msg_original):
+    """Executa verificação do resultado após 35 minutos usando o ID da partida."""
+    try:
+        logger.info(f"⏰ Aguardando 35 minutos para verificar resultado do fixture ID: {fixture_id}")
+        await asyncio.sleep(2100)  # 35 minutos
+
+        headers = {"x-apisports-key": FOOTBALL_API_KEY}
+        url = f"https://v3.football.api-sports.io/fixtures?id={fixture_id}"
+        resultado = "⏳ RESULTADO NÃO LOCALIZADO"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get('results', 0) > 0:
+                        fixture = data['response'][0]
+                        gols_casa_ht = fixture.get('score', {}).get('halftime', {}).get('home')
+                        gols_fora_ht = fixture.get('score', {}).get('halftime', {}).get('away')
+                        gols_ht = (gols_casa_ht or 0) + (gols_fora_ht or 0)
+                        
+                        logger.info(f"📊 Veredito para {fixture_id}: {gols_ht} gols no HT")
+                        resultado = "✅ BATEU" if gols_ht >= 1 else "❌ NÃO BATEU"
+                else:
+                    logger.error(f"Erro na API ao buscar veredito para {fixture_id}: Status {resp.status}")
+
+        if resultado == "✅ BATEU":
+            resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅"
+        elif resultado == "❌ NÃO BATEU":
+            resultado_final = "R E D ❌"
+        else:
+            resultado_final = resultado # Mantém a mensagem de erro/não localizado
+
+        novo_texto = f"{msg_original.text}\n\n───────────────\n{resultado_final}"
+
+        await bot.edit_message_text(
+            chat_id=CHAT_ID_DESTINO,
+            message_id=msg_original.message_id,
+            text=novo_texto,
+            parse_mode='Markdown'
+        )
+        logger.info(f"✅ Veredito atualizado para o fixture ID: {fixture_id}")
+
+    except Exception as e:
+        logger.error(f"Erro na tarefa de veredito por ID: {e}")
 
 # FUNÇÃO DE ANÁLISE PRINCIPAL ATUALIZADA
 async def analisar(texto):
@@ -265,7 +391,10 @@ async def analisar(texto):
         match_chutes = re.findall(r"Total:\s*(\d+)/(\d+)", texto)
         chutes = list(map(int, match_chutes[0])) if match_chutes else [0, 0]
 
-        # NOVA ANÁLISE CLIMÁTICA
+        # CHAMAR A BUSCA DE ODD
+        odd_ht, fixture_id = await buscar_odd_ht(jogo)
+        
+        # ANÁLISE CLIMÁTICA
         pontos_clima, criterios_clima, detalhes_clima, status_clima = analisar_clima(texto)
 
         # Análise dos critérios técnicos
@@ -323,13 +452,11 @@ async def analisar(texto):
         logger.info(f"🌤️ Critérios Climáticos: {', '.join(criterios_clima) if criterios_clima else 'Nenhum'}")
 
         # LÓGICA DE DECISÃO INTEGRADA
-        # Critério flexível: 64% da pontuação total (9.0 pontos de 14)
-        # Ou pelo menos 7 pontos técnicos + clima favorável/neutro
-        limite_minimo = 9.0  # ~64% de 14 pontos
+        limite_minimo = 9.0
         
         condicao1 = pontos_total >= limite_minimo
-        condicao2 = pontos_tecnicos >= 7 and pontos_clima >= 2  # Técnicos bons + clima pelo menos neutro
-        condicao3 = pontos_tecnicos >= 8 and pontos_clima >= 1.5  # Técnicos muito bons + clima razoável
+        condicao2 = pontos_tecnicos >= 7 and pontos_clima >= 2
+        condicao3 = pontos_tecnicos >= 8 and pontos_clima >= 1.5
         
         deve_entrar = condicao1 or condicao2 or condicao3
 
@@ -351,19 +478,30 @@ async def analisar(texto):
             resumo_clima = f" {status_clima} ({pontos_clima}/4pts)"
             resumo_tecnico = f" {pontos_tecnicos}/10pts"
             
+            # MENSAGEM ATUALIZADA COM A ODD
             msg = f"""⚽️ {veredito}
 🏟️ {jogo}
 🤖 OVERBOT ANÁLISE:
 ⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} 
 🌤️ CLIMA: {resumo_clima}
+📊 ODD ATUAL: *{odd_ht}*
 ▶️ ENTRADA: {conclusao}"""
 
             try:
-                msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg)
+                msg_enviada = await bot.send_message(
+                    chat_id=CHAT_ID_DESTINO, 
+                    text=msg,
+                    parse_mode='Markdown' # Adicionado para formatar a odd em negrito
+                )
                 logger.info("✅ Sinal de entrada enviado com sucesso")
                 
-                # Agendar verificação do resultado
-                asyncio.create_task(tarefa_veredito(jogo, msg_enviada))
+                # Agendar verificação do resultado, agora com o ID do fixture
+                if fixture_id:
+                    asyncio.create_task(tarefa_veredito_por_id(fixture_id, msg_enviada))
+                else:
+                    # Fallback para o método antigo se o ID não for encontrado
+                    logger.warning(f"Fixture ID não encontrado para '{jogo}'. Usando veredito antigo.")
+                    asyncio.create_task(tarefa_veredito(jogo, msg_enviada))
                 
             except Exception as e:
                 logger.error(f"Erro ao enviar mensagem: {e}")
