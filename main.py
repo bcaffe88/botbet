@@ -50,68 +50,79 @@ def similaridade(a, b):
         return 0.0
     return SequenceMatcher(None, normalizar(a), normalizar(b)).ratio()
 
-# FUNÇÃO DE ANÁLISE CLIMÁTICA ATUALIZADA
+# FUNÇÃO DE ANÁLISE CLIMÁTICA ATUALIZADA E ROBUSTA
 def analisar_clima(texto):
-    """Analisa condições climáticas e retorna pontuação"""
+    """Analisa condições climáticas individualmente para maior robustez e retorna pontuação."""
     pontos_clima = 0
     criterios_clima = []
     detalhes_clima = {}
+    
+    logger.info("🌤️ Iniciando análise climática robusta...")
 
     try:
-        # Expressão regular robusta com grupos nomeados
-        clima_match = re.search(
-            r"🌡️\s*(?P<temp>[\d.]+)\s*°C\s*(?:\||-)?\s*☁️\s*(?P<nuvens>[\d.]+)%\s*(?:\||-)?\s*💧\s*(?P<umidade>[\d.]+)%\s*(?:\||-)?\s*💨\s*(?P<vento>[\d.]+)\s*m/s",
-            texto,
-            re.DOTALL
-        )
+        # Extrair cada valor climático individualmente
+        temp_match = re.search(r"🌡️\s*([\d.]+)\s*°C", texto)
+        nuvens_match = re.search(r"☁️\s*([\d.]+)%", texto)
+        umidade_match = re.search(r"💧\s*([\d.]+)%", texto)
+        vento_match = re.search(r"💨\s*([\d.]+)\s*m/s", texto)
 
-        if clima_match:
-            temperatura = float(clima_match.group("temp"))
-            nebulosidade = float(clima_match.group("nuvens"))
-            umidade = float(clima_match.group("umidade"))
-            vento = float(clima_match.group("vento"))
+        temperatura = float(temp_match.group(1)) if temp_match else None
+        nebulosidade = float(nuvens_match.group(1)) if nuvens_match else None
+        umidade = float(umidade_match.group(1)) if umidade_match else None
+        vento = float(vento_match.group(1)) if vento_match else None
+        
+        detalhes_clima = {
+            'temperatura': temperatura,
+            'nebulosidade': nebulosidade,
+            'umidade': umidade,
+            'vento': vento
+        }
+        
+        log_clima = []
 
-            detalhes_clima = {
-                'temperatura': temperatura,
-                'nebulosidade': nebulosidade,
-                'umidade': umidade,
-                'vento': vento
-            }
-
-            # Análise Temperatura (18°C a 28°C)
+        # Análise Temperatura (18°C a 28°C)
+        if temperatura is not None:
             if 18 <= temperatura <= 28:
                 pontos_clima += 1
                 criterios_clima.append("Temperatura ideal")
+            log_clima.append(f"Temperatura: {temperatura}°C → {'✅' if 18 <= temperatura <= 28 else '❌'}")
+        else:
+            log_clima.append("Temperatura: N/D")
 
-            # Análise Nebulosidade (20% a 70%)
+        # Análise Nebulosidade (20% a 70%)
+        if nebulosidade is not None:
             if 20 <= nebulosidade <= 70:
                 pontos_clima += 1
                 criterios_clima.append("Nebulosidade ideal")
+            log_clima.append(f"Nebulosidade: {nebulosidade}% → {'✅' if 20 <= nebulosidade <= 70 else '❌'}")
+        else:
+            log_clima.append("Nebulosidade: N/D")
 
-            # Análise Umidade (50% a 75%)
+        # Análise Umidade (50% a 75%)
+        if umidade is not None:
             if 50 <= umidade <= 75:
                 pontos_clima += 1
                 criterios_clima.append("Umidade ideal")
+            log_clima.append(f"Umidade: {umidade}% → {'✅' if 50 <= umidade <= 75 else '❌'}")
+        else:
+            log_clima.append("Umidade: N/D")
 
-            # Análise Vento
+        # Análise Vento
+        if vento is not None:
             if vento <= 7:
                 pontos_clima += 1
                 criterios_clima.append("Vento ótimo")
             elif 7 < vento <= 10:
                 pontos_clima += 0.5
                 criterios_clima.append("Vento moderado")
-
-            logger.info(f"🌤️ Análise Climática:")
-            logger.info(f"  • Temperatura: {temperatura}°C → {'✅' if 18 <= temperatura <= 28 else '❌'}")
-            logger.info(f"  • Nebulosidade: {nebulosidade}% → {'✅' if 20 <= nebulosidade <= 70 else '❌'}")
-            logger.info(f"  • Umidade: {umidade}% → {'✅' if 50 <= umidade <= 75 else '❌'}")
-            logger.info(f"  • Vento: {vento} m/s → {'✅' if vento <= 7 else '⚠️' if vento <= 10 else '❌'}")
-
+            log_clima.append(f"Vento: {vento} m/s → {'✅' if vento <= 7 else '⚠️' if vento <= 10 else '❌'}")
         else:
-            logger.warning("❌ Não foi possível extrair dados climáticos completos. Verifique o padrão da mensagem.")
+            log_clima.append("Vento: N/D")
+            
+        logger.info(f"🌤️ Detalhes Climáticos Extraídos: {' | '.join(log_clima)}")
 
     except Exception as e:
-        logger.error(f"Erro na análise climática: {e}")
+        logger.error(f"Erro na análise climática robusta: {e}")
 
     # Classificação do clima
     if pontos_clima >= 3.5:
@@ -121,7 +132,7 @@ def analisar_clima(texto):
     else:
         status_clima = "🔴 DESFAVORÁVEL"
 
-    logger.info(f"🌤️ Pontuação Climática: {pontos_clima}/4 - {status_clima}")
+    logger.info(f"🌤️ Pontuação Climática Final: {pontos_clima}/4 - {status_clima}")
 
     return pontos_clima, criterios_clima, detalhes_clima, status_clima
 
