@@ -144,61 +144,72 @@ def analisar_clima(texto):
     logger.info(f"🌤️ Pontuação Climática Final: {pontos_clima}/4 - {status_clima}")
     return pontos_clima, criterios_clima, status_clima
 
+# --- VERSÃO FINAL E DEFINITIVA DA FUNÇÃO DE BUSCA DE ODD ---
 async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
     """
-    Busca a odd para Over 0.5 HT.
-    VERSÃO FINAL E DEFINITIVA: Procura por uma lista de nomes de mercado, 
-    incluindo o nome correto "Over/Under Line (1st Half)" encontrado pelo usuário.
+    Busca a odd para Over 0.5 HT de forma inteligente, usando o endpoint especializado /odds/live
+    e procurando por palavras-chave no nome do mercado.
     """
     odd_ht = "N/D"
     fixture_id = await buscar_fixture_id(nome_jogo)
     if not fixture_id:
         return "N/L", None
 
-    # LISTA DE NOMES POSSÍVEIS ATUALIZADA COM A SUA DESCOBERTA
-    NOMES_MERCADO_HT = [
-        "Over/Under First Half",
-        "First Half Goals",
-        "Goals Over/Under - 1st Half",
-        "Total - 1st Half",
-        "Over/Under Line (1st Half)"  # <<< NOME CORRETO ADICIONADO!
-    ]
+    # Palavras-chave para identificar o mercado correto de forma flexível
+    KEYWORDS_TEMPO = ['first half', '1st half', 'half time', 'ht', '1h', 'meio tempo']
+    KEYWORDS_TIPO = ['over/under', 'total', 'goals', 'gols']
 
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
-    url_odds = "https://v3.football.api-sports.io/odds"
+    
+    # --- ALTERAÇÃO PRINCIPAL AQUI ---
+    # Usando o endpoint especializado para odds AO VIVO, como você sugeriu.
+    url_odds = "https://v3.football.api-sports.io/odds/live"
+    
+    # Para o endpoint /odds/live, é recomendado não especificar o bookmaker para ver todas as opções.
+    # Mas vamos manter o da Bet365 por enquanto para consistência.
     params = {"fixture": str(fixture_id), "bookmaker": "8"}
     
-    logger.info(f"🔎 Buscando TODOS os mercados para Fixture ID: {fixture_id} | Bookmaker: 8")
+    logger.info(f"🔎 Buscando mercados AO VIVO em '{url_odds}' para Fixture ID: {fixture_id}")
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url_odds, headers=headers, params=params) as resp_odds:
                 if resp_odds.status == 200:
                     data_odds = await resp_odds.json()
                     if data_odds.get('results', 0) > 0 and data_odds.get('response'):
-                        bookmaker_data = data_odds['response'][0].get('bookmakers', [])
+                        # A estrutura de resposta do /odds/live é um pouco diferente
+                        live_odds_data = data_odds['response'][0]
+                        bookmaker_data = live_odds_data.get('bookmakers', [])
+
                         if bookmaker_data:
                             for market in bookmaker_data[0].get('bets', []):
-                                if market.get('name') in NOMES_MERCADO_HT:
-                                    logger.info(f"✅ Mercado HT encontrado com o nome: '{market.get('name')}'")
+                                market_name = market.get('name', '').lower()
+                                
+                                # Lógica de busca por palavras-chave
+                                if any(kw in market_name for kw in KEYWORDS_TEMPO) and \
+                                   any(kw in market_name for kw in KEYWORDS_TIPO):
+                                    
+                                    logger.info(f"✅ Mercado HT compatível encontrado: '{market.get('name')}'")
                                     for value in market.get('values', []):
                                         if value.get('value') == 'Over 0.5':
                                             odd_ht = value.get('odd', 'N/D')
                                             logger.info(f"✅ ODD ENCONTRADA: {odd_ht}")
                                             return odd_ht, fixture_id
+                                    
                                     logger.warning(f"⚠️ Mercado HT encontrado ('{market.get('name')}'), mas a linha 'Over 0.5' não estava disponível.")
-                                    return odd_ht, fixture_id
-                            logger.warning(f"⚠️ Nenhum dos nomes de mercado HT conhecidos ({NOMES_MERCADO_HT}) foi encontrado na resposta.")
+                            
+                            logger.warning("⚠️ Nenhum mercado compatível com as palavras-chave continha a linha 'Over 0.5'.")
                         else:
-                            logger.warning("⚠️ API retornou resposta, mas sem dados do bookmaker.")
+                            logger.warning("⚠️ API retornou resposta, mas sem dados do bookmaker no endpoint /live.")
                     else:
-                        logger.warning(f"⚠️ API não retornou nenhuma odd para o fixture {fixture_id}.")
+                        logger.warning(f"⚠️ API não retornou nenhuma odd AO VIVO para o fixture {fixture_id}.")
                 else:
-                    logger.error(f"❌ Erro na API de Odds: Status {resp_odds.status}")
+                    logger.error(f"❌ Erro na API de Odds AO VIVO: Status {resp_odds.status}")
                     return "API_ERR", fixture_id
     except Exception as e:
         logger.error(f"❌ Erro crítico em buscar_odd_ht: {e}")
         return "ERRO", fixture_id
     return odd_ht, fixture_id
+
 
 async def tarefa_veredito_por_id(fixture_id, msg_original):
     resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"
