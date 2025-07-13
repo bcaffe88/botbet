@@ -8,6 +8,7 @@ from difflib import SequenceMatcher
 from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
+from datetime import timedelta
 import aiohttp
 
 # Configurar logging
@@ -48,65 +49,64 @@ def similaridade(a, b):
 
 async def buscar_fixture_id(nome_jogo: str) -> int | None:
     """
-    Busca o fixture_id de um jogo de forma inteligente, usando o parâmetro 'search' da API.
+    Busca o fixture_id de forma inteligente, procurando em hoje, ontem e amanhã
+    para resolver problemas de fuso horário.
     """
     if not nome_jogo or not FOOTBALL_API_KEY:
         return None
 
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
-    data_hoje = datetime.now().strftime("%Y-%m-%d")
     
-    # Pega o primeiro time do nome para usar na busca. É mais eficiente que buscar o nome completo.
     try:
         time_busca = nome_jogo.split(' x ')[0].strip()
     except Exception:
-        time_busca = nome_jogo # Fallback caso o nome não tenha ' x '
+        time_busca = nome_jogo
 
-    # ATUALIZAÇÃO: Usamos o parâmetro 'search' para uma busca mais precisa
-    url_fixtures = f"https://v3.football.api-sports.io/fixtures?date={data_hoje}&search={time_busca}"
-    
-    logger.info(f"🔎 Buscando fixture com data={data_hoje} e search='{time_busca}'")
+    datas_para_buscar = [
+        datetime.now().strftime("%Y-%m-%d"), # Hoje
+        (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"), # Ontem
+        (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")  # Amanhã
+    ]
 
-    fixture_id = None
-    try:
-        timeout = aiohttp.ClientTimeout(total=15)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url_fixtures, headers=headers) as resp:
-                if resp.status != 200:
-                    logger.error(f"Erro ao buscar fixtures: Status {resp.status}")
-                    return None
-                
-                data = await resp.json()
-                
-                if not data.get("response"):
-                    logger.warning(f"A busca por '{time_busca}' não retornou nenhum jogo para hoje.")
-                    return None
-
-                jogos = data.get("response", [])
-                logger.info(f"API retornou {len(jogos)} jogo(s) para a busca '{time_busca}'")
-
-                maior_similaridade = 0.75 # Mantemos o cálculo de similaridade para garantir que é o jogo certo
-                for item in jogos:
-                    teams = item.get("teams", {})
-                    casa = teams.get("home", {}).get("name", "")
-                    fora = teams.get("away", {}).get("name", "")
-                    nome_match_api = f"{casa} x {fora}"
-                    
-                    sim = similaridade(nome_jogo, nome_match_api)
-                    if sim > maior_similaridade:
-                        maior_similaridade = sim
-                        fixture_id = item.get("fixture", {}).get("id")
-                
-                if fixture_id:
-                    logger.info(f"✅ Fixture encontrado para '{nome_jogo}': ID {fixture_id} (Similaridade: {maior_similaridade:.2f})")
-                else:
-                    logger.warning(f"Fixture não localizado para '{nome_jogo}' nos {len(jogos)} resultados da busca.")
-
-    except Exception as e:
-        logger.error(f"Erro em buscar_fixture_id: {e}")
-        return None
+    for data_busca in datas_para_buscar:
+        logger.info(f"🔎 Buscando fixture com data={data_busca} e search='{time_busca}'")
+        url_fixtures = f"https://v3.football.api-sports.io/fixtures?date={data_busca}&search={time_busca}"
         
-    return fixture_id
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url_fixtures, headers=headers) as resp:
+                    if resp.status != 200:
+                        logger.error(f"Erro na API ao buscar fixtures na data {data_busca}: Status {resp.status}")
+                        continue # Tenta a próxima data
+
+                    data = await resp.json()
+                    if not data.get("response") or not data.get("results", 0) > 0:
+                        logger.warning(f"Nenhum jogo encontrado para '{time_busca}' na data {data_busca}.")
+                        continue
+
+                    jogos = data.get("response", [])
+                    maior_similaridade = 0.75
+                    fixture_id_encontrado = None
+                    for item in jogos:
+                        teams = item.get("teams", {})
+                        casa = teams.get("home", {}).get("name", "")
+                        fora = teams.get("away", {}).get("name", "")
+                        nome_match_api = f"{casa} x {fora}"
+                        sim = similaridade(nome_jogo, nome_match_api)
+                        if sim > maior_similaridade:
+                            maior_similaridade = sim
+                            fixture_id_encontrado = item.get("fixture", {}).get("id")
+                    
+                    if fixture_id_encontrado:
+                        logger.info(f"✅ Fixture encontrado na data {data_busca} para '{nome_jogo}': ID {fixture_id_encontrado}")
+                        return fixture_id_encontrado
+                        
+        except Exception as e:
+            logger.error(f"Erro em buscar_fixture_id para data {data_busca}: {e}")
+            continue
+
+    logger.error(f"❌ Fixture não localizado para '{nome_jogo}' após buscar em 3 dias.")
+    return None
 
 # --- Funções do Bot 1 (Análise Climática) ---
 
@@ -253,14 +253,16 @@ async def tarefa_veredito_por_id(fixture_id, msg_original):
                 logger.error(f"❌ Falha ao editar mensagem para fixture {fixture_id}: {edit_error}")
 
 async def analisar(texto):
+    """
+    Função de análise OTIMIZADA: primeiro analisa os pontos, e SÓ ENTÃO busca a odd
+    e o fixture se o sinal for bom, economizando chamadas de API.
+    """
     logger.info("📊 Iniciando análise do sinal 'Over 0.5 HT'")
     try:
+        # --- PASSO 1: Extrair todos os dados e calcular pontos (sem API) ---
         jogo_match = re.search(r'⚽️\s*(.+)', texto)
         jogo = jogo_match.group(1).strip() if jogo_match else "Times não identificados"
-        logger.info(f"📌 Jogo detectado: {jogo}")
-
-        odd_ht, fixture_id = await buscar_odd_ht(jogo)
-
+        
         minuto_match = re.search(r"⏰\s*(\d+)", texto)
         minuto = int(minuto_match.group(1)) if minuto_match else None
         ia_match = re.search(r"OVER 0\.5 HT:\s*([\d.]+)%", texto)
@@ -299,7 +301,13 @@ async def analisar(texto):
 
         logger.info(f"📈 Pontuação Técnica: {pontos_tecnicos}/10 | 🌤️ Pontuação Climática: {pontos_clima}/4 | 🎯 Pontuação Total: {pontos_total}/{max_pontos_total}")
 
+        # --- PASSO 2: Se a pontuação for boa, SÓ ENTÃO fazer a chamada à API ---
         if deve_entrar:
+            logger.info(f"✅ Pontuação suficiente para '{jogo}'. Buscando odd e fixture ID...")
+            
+            # Chamada à API acontece aqui agora!
+            odd_ht, fixture_id = await buscar_odd_ht(jogo)
+
             if pontos_total >= 12: confianca = "MUITO ALTA 🔥 STAKE 1%"
             elif pontos_total >= 10: confianca = "ALTA ✅ STAKE 0.75%"
             elif pontos_clima >= 3: confianca = "MÉDIA-ALTA ⚡ STAKE 0.5%"
@@ -322,9 +330,10 @@ async def analisar(texto):
             if fixture_id:
                 asyncio.create_task(tarefa_veredito_por_id(fixture_id, msg_enviada))
             else:
-                logger.warning(f"Veredito não agendado para '{jogo}' pois o fixture ID não foi encontrado.")
+                logger.warning(f"Veredito não agendado para '{jogo}' pois o fixture ID não pôde ser encontrado pela API.")
         else:
-            logger.info(f"❌ Critérios insuficientes para 'Over 0.5 HT' em {jogo}.")
+            logger.info(f"❌ Critérios insuficientes para '{jogo}'. Sinal ignorado sem uso de API.")
+            
     except Exception as e:
         logger.error(f"Erro na análise principal: {e}")
 
