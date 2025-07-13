@@ -357,7 +357,7 @@ Estratégia: {estrategia_match.group(1).strip() if estrategia_match else 'N/A'}"
 
 # --- ROTEADOR E INICIALIZAÇÃO ---
 
-client = TelegramClient("sessao_unificada", API_ID, API_HASH)
+client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 
 @client.on(events.NewMessage(chats=CHAT_ID_SINAL))
 async def roteador_de_sinais(event):
