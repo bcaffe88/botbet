@@ -133,18 +133,23 @@ def analisar_clima(texto):
     return pontos_clima, criterios_clima, status_clima
 
 async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
-    """Busca o fixture_id e a odd para Over 0.5 HT de um jogo com logging detalhado."""
+    """
+    Busca o fixture_id e a odd para Over 0.5 HT de um jogo.
+    Esta versão é robusta: busca todos os mercados e encontra o correto pelo nome,
+    em vez de depender de um ID de mercado fixo.
+    """
     odd_ht = "N/D"
     fixture_id = await buscar_fixture_id(nome_jogo)
 
     if not fixture_id:
-        return "N/L", None # Retorna 'Não Localizado' se o fixture não for encontrado
+        return "N/L", None
 
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
     url_odds = "https://v3.football.api-sports.io/odds"
-    params = {"fixture": str(fixture_id), "market": "145", "bookmaker": "8"} # Market 145 = Over/Under HT
+    # ATUALIZAÇÃO: Não pedimos mais um 'market' específico, vamos pegar todos.
+    params = {"fixture": str(fixture_id), "bookmaker": "8"}
     
-    logger.info(f"🔎 Buscando odds para Fixture ID: {fixture_id} | Mercado: 145 | Bookmaker: 8")
+    logger.info(f"🔎 Buscando TODOS os mercados para Fixture ID: {fixture_id} | Bookmaker: 8")
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -152,38 +157,44 @@ async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
                 if resp_odds.status == 200:
                     data_odds = await resp_odds.json()
                     
-                    # LOG DE DEPURAÇÃO: Imprime a resposta completa da API para análise
-                    logger.info(f"📦 Resposta completa da API de Odds: {data_odds}")
+                    # Log para depuração futura, se necessário
+                    # logger.info(f"📦 Resposta completa da API de Odds: {data_odds}")
 
                     if data_odds.get('results', 0) > 0 and data_odds.get('response'):
                         bookmaker_data = data_odds['response'][0].get('bookmakers', [])
                         if bookmaker_data:
-                            bets = bookmaker_data[0].get('bets', [])
-                            if bets and bets[0].get('name') == 'Over/Under First Half':
-                                values = bets[0].get('values', [])
-                                for value in values:
-                                    if value.get('value') == 'Over 0.5':
-                                        odd_ht = value.get('odd', 'N/D')
-                                        logger.info(f"✅ ODD ENCONTRADA: {odd_ht}")
-                                        break # Para o loop assim que encontrar a odd
-                                
-                                # Se o loop terminar e a odd continuar "N/D"
-                                if odd_ht == "N/D":
+                            # Itera por todos os mercados que o bookmaker oferece para este jogo
+                            for market in bookmaker_data[0].get('bets', []):
+                                # Procuramos o mercado pelo nome exato
+                                if market.get('name') == 'Over/Under First Half':
+                                    logger.info("✅ Mercado 'Over/Under First Half' encontrado!")
+                                    values = market.get('values', [])
+                                    for value in values:
+                                        if value.get('value') == 'Over 0.5':
+                                            odd_ht = value.get('odd', 'N/D')
+                                            logger.info(f"✅ ODD ENCONTRADA: {odd_ht}")
+                                            # Interrompe ambos os loops assim que encontrar a odd
+                                            return odd_ht, fixture_id
+                                    
+                                    # Se encontrou o mercado mas não a linha 0.5
                                     logger.warning("⚠️ Mercado 'Over/Under First Half' encontrado, mas a linha específica 'Over 0.5' não estava disponível.")
-                            else:
-                                logger.warning("⚠️ Bookmaker encontrado, mas o mercado 'Over/Under First Half' (ID 145) não foi retornado.")
+                                    return odd_ht, fixture_id
+                            
+                            # Se o loop terminar sem encontrar o mercado
+                            logger.warning("⚠️ Nenhum mercado com o nome 'Over/Under First Half' foi encontrado na resposta da API.")
                         else:
                             logger.warning("⚠️ A API retornou uma resposta, mas sem dados do bookmaker (ID 8).")
                     else:
                         logger.warning(f"⚠️ A API não retornou nenhuma odd para o fixture {fixture_id}. (results: 0)")
                 else:
                     logger.error(f"❌ Erro na API de Odds: Status {resp_odds.status}")
-                    return "API_ERR_ODD", fixture_id
+                    return "API_ERR", fixture_id
     except Exception as e:
         logger.error(f"❌ Erro crítico em buscar_odd_ht: {e}")
         return "ERRO", fixture_id
         
     return odd_ht, fixture_id
+
 
 async def tarefa_veredito_por_id(fixture_id, msg_original):
     try:
