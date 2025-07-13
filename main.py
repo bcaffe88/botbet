@@ -145,13 +145,29 @@ def analisar_clima(texto):
     return pontos_clima, criterios_clima, status_clima
 
 async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
+    """
+    Busca a odd para Over 0.5 HT.
+    VERSÃO FINAL E DEFINITIVA: Procura por uma lista de nomes de mercado, 
+    incluindo o nome correto "Over/Under Line (1st Half)" encontrado pelo usuário.
+    """
     odd_ht = "N/D"
     fixture_id = await buscar_fixture_id(nome_jogo)
     if not fixture_id:
         return "N/L", None
+
+    # LISTA DE NOMES POSSÍVEIS ATUALIZADA COM A SUA DESCOBERTA
+    NOMES_MERCADO_HT = [
+        "Over/Under First Half",
+        "First Half Goals",
+        "Goals Over/Under - 1st Half",
+        "Total - 1st Half",
+        "Over/Under Line (1st Half)"  # <<< NOME CORRETO ADICIONADO!
+    ]
+
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
     url_odds = "https://v3.football.api-sports.io/odds"
     params = {"fixture": str(fixture_id), "bookmaker": "8"}
+    
     logger.info(f"🔎 Buscando TODOS os mercados para Fixture ID: {fixture_id} | Bookmaker: 8")
     try:
         async with aiohttp.ClientSession() as session:
@@ -162,20 +178,20 @@ async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
                         bookmaker_data = data_odds['response'][0].get('bookmakers', [])
                         if bookmaker_data:
                             for market in bookmaker_data[0].get('bets', []):
-                                if market.get('name') == 'Over/Under First Half':
-                                    logger.info("✅ Mercado 'Over/Under First Half' encontrado!")
+                                if market.get('name') in NOMES_MERCADO_HT:
+                                    logger.info(f"✅ Mercado HT encontrado com o nome: '{market.get('name')}'")
                                     for value in market.get('values', []):
                                         if value.get('value') == 'Over 0.5':
                                             odd_ht = value.get('odd', 'N/D')
                                             logger.info(f"✅ ODD ENCONTRADA: {odd_ht}")
                                             return odd_ht, fixture_id
-                                    logger.warning("⚠️ Mercado 'Over/Under First Half' encontrado, mas a linha específica 'Over 0.5' não estava disponível.")
+                                    logger.warning(f"⚠️ Mercado HT encontrado ('{market.get('name')}'), mas a linha 'Over 0.5' não estava disponível.")
                                     return odd_ht, fixture_id
-                            logger.warning("⚠️ Nenhum mercado com o nome 'Over/Under First Half' foi encontrado na resposta da API.")
+                            logger.warning(f"⚠️ Nenhum dos nomes de mercado HT conhecidos ({NOMES_MERCADO_HT}) foi encontrado na resposta.")
                         else:
-                            logger.warning("⚠️ A API retornou uma resposta, mas sem dados do bookmaker (ID 8).")
+                            logger.warning("⚠️ API retornou resposta, mas sem dados do bookmaker.")
                     else:
-                        logger.warning(f"⚠️ A API não retornou nenhuma odd para o fixture {fixture_id}. (results: 0)")
+                        logger.warning(f"⚠️ API não retornou nenhuma odd para o fixture {fixture_id}.")
                 else:
                     logger.error(f"❌ Erro na API de Odds: Status {resp_odds.status}")
                     return "API_ERR", fixture_id
