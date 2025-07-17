@@ -359,8 +359,8 @@ async def verificar_status_jogo(fixture_id: int) -> str:
                         logger.info(f"📊 Status: {status_short} - {status_long}")
                         
                         return status_short
-                except Exception as e:
-                    logger.error(f"❌ Erro ao processar resposta do status: {e}")
+                    except Exception as e:
+                        logger.error(f"❌ Erro ao processar resposta do status: {e}")
     except Exception as e:
         logger.error(f"❌ Erro ao verificar status: {e}")
     
