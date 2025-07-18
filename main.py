@@ -328,6 +328,42 @@ async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
     return odd_ht, fixture_id
 
 
+async def verificar_status_jogo(fixture_id: int) -> str:
+    """
+    Verifica o status atual do jogo para confirmar se está ao vivo
+    """
+    headers = {"x-apisports-key": FOOTBALL_API_KEY}
+    url = f"https://v3.football.api-sports.io/fixtures"
+    params = {"id": str(fixture_id)}
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, params=params) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get('response'):
+                        fixture_info = data['response'][0]
+                        fixture_data = fixture_info.get('fixture', {})
+                        status = fixture_data.get('status', {})
+                        status_short = status.get('short', 'N/A')
+                        status_long = status.get('long', 'N/A')
+                        
+                        # Informações adicionais do jogo
+                        home_team = fixture_info.get('teams', {}).get('home', {}).get('name', 'N/A')
+                        away_team = fixture_info.get('teams', {}).get('away', {}).get('name', 'N/A')
+                        league = fixture_info.get('league', {}).get('name', 'N/A')
+                        
+                        logger.info(f"🎮 Jogo: {home_team} vs {away_team}")
+                        logger.info(f"🏆 Liga: {league}")
+                        logger.info(f"📊 Status: {status_short} - {status_long}")
+                        
+                        return status_short
+                        
+    except Exception as e:
+        logger.error(f"❌ Erro ao verificar status: {e}")
+    
+    return "N/A"
+
 # Função auxiliar para verificar se o jogo está realmente ao vivo
 async def verificar_status_jogo(fixture_id: int) -> str:
     """
