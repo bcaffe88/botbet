@@ -147,168 +147,79 @@ def analisar_clima(texto):
 # --- NOVO SISTEMA DE BUSCA DE ODDS (2 FUNÇÕES) ---
 async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
     """
-    Busca a odd para Over 0.5 HT APENAS EM JOGOS AO VIVO usando o endpoint /odds/live
+    Busca a odd para Over 0.5 HT APENAS EM JOGOS AO VIVO com lógica de busca avançada,
+    flexível e otimizada para produção.
     """
     odd_ht = "N/D"
     fixture_id = await buscar_fixture_id(nome_jogo)
     if not fixture_id:
         return "N/L", None
 
+    # Listas de palavras-chave e padrões para máxima compatibilidade
+    KEYWORDS_TEMPO = ['first half', '1st half', 'half time', 'ht', '1h', 'meio tempo', 'intervalo', '1º tempo']
+    KEYWORDS_TIPO = ['over/under', 'total', 'goals', 'gols', 'line']
+    HT_GOAL_MARKET_IDS = ['8', '9', '25', '26', '27', '28', '37', '38', '39', '101', '102', '103', '104', '105', '106']
+    OVER_05_PATTERNS = ['over 0.5', 'over 0,5', 'mais 0.5', 'mais 0,5', 'acima 0.5', 'acima 0,5', '> 0.5', '> 0,5']
+
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
     url_odds = "https://v3.football.api-sports.io/odds/live"
     params = {"fixture": str(fixture_id)}
-    
+
     logger.info(f"🔎 Buscando APENAS odds AO VIVO para Fixture ID: {fixture_id}")
-    
+
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url_odds, headers=headers, params=params) as resp_odds:
                 if resp_odds.status == 200:
                     data_odds = await resp_odds.json()
-                    logger.info(f"📋 RESPOSTA COMPLETA /odds/live: {data_odds}")
-                    
-                    # Verificar status do jogo
-                    status_jogo = await verificar_status_jogo(fixture_id)
-                    logger.info(f"🎮 Status atual do jogo: {status_jogo}")
                     
                     if data_odds.get('results', 0) > 0 and data_odds.get('response'):
-                        response_list = data_odds['response']
+                        fixture_data = data_odds['response'][0]
+                        bookmakers = fixture_data.get('bookmakers', [])
                         
-                        if not response_list:
-                            logger.warning("⚠️ Lista de resposta vazia do /odds/live")
+                        if not bookmakers:
+                            logger.warning(f"⚠️ Nenhum bookmaker com odds ao vivo encontrado para fixture {fixture_id}")
                             return "N/D", fixture_id
                         
-                        logger.info(f"📊 Total de fixtures retornados: {len(response_list)}")
-                        
-                        # Processar cada fixture
-                        for fixture_data in response_list:
-                            fixture_response_id = fixture_data.get('fixture', {}).get('id')
-                            logger.info(f"🎯 Processando fixture {fixture_response_id}")
-                            
-                            # Verificar se é o fixture correto
-                            if str(fixture_response_id) != str(fixture_id):
-                                logger.info(f"⏭️ Pulando fixture {fixture_response_id}")
-                                continue
-                                
-                            # A estrutura real tem 'odds' diretamente, não 'bookmakers'
-                            odds_markets = fixture_data.get('odds', [])
-                            logger.info(f"📊 Total de mercados: {len(odds_markets)}")
-                            
-                            if not odds_markets:
-                                logger.warning(f"⚠️ Nenhum mercado encontrado para fixture {fixture_id}")
-                                continue
-                            
-                            # Percorrer todos os mercados
-                            for i, market in enumerate(odds_markets):
-                                market_name = market.get('name', f'Market_{i}')
+                        # Percorre TODOS os bookmakers retornados pela API
+                        for bookmaker in bookmakers:
+                            for market in bookmaker.get('bets', []):
+                                market_name = market.get('name', '').lower()
                                 market_id = str(market.get('id', ''))
                                 
-                                logger.info(f"📈 [{i+1}] Mercado: '{market_name}' (ID: {market_id})")
-                                
-                                # Listar valores do mercado
-                                values = market.get('values', [])
-                                for k, value in enumerate(values):
-                                    value_name = value.get('value', f'Value_{k}')
-                                    odd_value = value.get('odd', 'N/A')
-                                    handicap = value.get('handicap', '')
-                                    logger.info(f"    💰 [{k+1}] '{value_name}' handicap='{handicap}' = {odd_value}")
-                                
-                                # Buscar mercados HT
-                                market_name_lower = market_name.lower()
-                                
-                                # Palavras-chave para HT
-                                ht_keywords = ['first half', '1st half', 'half time', 'half-time', 'ht', '1h', 'primeiro tempo', 'meio tempo', 'half']
-                                
-                                # IDs conhecidos para mercados HT
-                                ht_market_ids = ['8', '9', '25', '26', '27', '28', '49', '24']
-                                
-                                # Verificar se é mercado HT
-                                has_ht_keyword = any(kw in market_name_lower for kw in ht_keywords)
-                                is_ht_market_id = market_id in ht_market_ids
-                                
-                                if has_ht_keyword or is_ht_market_id:
-                                    logger.info(f"🎯 MERCADO HT ENCONTRADO: '{market_name}' (ID: {market_id})")
+                                has_ht_keyword = any(kw in market_name for kw in KEYWORDS_TEMPO)
+                                has_goals_keyword = any(kw in market_name for kw in KEYWORDS_TIPO)
+                                is_ht_market_id = market_id in HT_GOAL_MARKET_IDS
+
+                                # Se a combinação de palavras-chave ou o ID indicam ser um mercado de gols no 1º tempo
+                                if (has_ht_keyword and has_goals_keyword) or is_ht_market_id:
+                                    logger.info(f"🎯 Mercado HT compatível encontrado: '{market.get('name')}' (Casa: {bookmaker.get('name')})")
                                     
-                                    # Buscar Over 0.5
-                                    for value in values:
-                                        value_name = value.get('value', '').lower()
-                                        odd_value = value.get('odd')
-                                        handicap = str(value.get('handicap', ''))
+                                    for value in market.get('values', []):
+                                        value_name = value.get('value', '').lower().replace(',', '.')
                                         
-                                        # Verificar se é Over 0.5
-                                        is_over = 'over' in value_name
-                                        is_05_handicap = handicap == '0.5' or handicap == '0,5'
-                                        
-                                        # Padrões no nome
-                                        over_patterns = ['over 0.5', 'over 0,5', 'over0.5', 'over0,5', 'mais 0.5', 'mais 0,5']
-                                        has_over_pattern = any(pattern in value_name for pattern in over_patterns)
-                                        
-                                        # Se é Over 0.5
-                                        if has_over_pattern or (is_over and is_05_handicap):
-                                            logger.info(f"🎉 OVER 0.5 HT ENCONTRADO! Odd: {odd_value} | Mercado: '{market_name}' | Valor: '{value.get('value')}' | Handicap: '{handicap}'")
+                                        # Verifica se a aposta é 'Over 0.5' usando múltiplos padrões
+                                        if any(pattern in value_name for pattern in OVER_05_PATTERNS):
+                                            odd_value = value.get('odd')
+                                            logger.info(f"🎉 OVER 0.5 HT ENCONTRADO! Odd: {odd_value}")
                                             return str(odd_value), fixture_id
-                                        
-                                        # Log valores interessantes
-                                        if '0.5' in value_name or '0,5' in value_name or handicap in ['0.5', '0,5']:
-                                            logger.info(f"🔍 Valor interessante: '{value.get('value')}' handicap='{handicap}' = {odd_value}")
+                                    
+                                    # Se encontrou o mercado mas não a linha, não precisa continuar procurando em outros mercados deste bookmaker
+                                    logger.debug(f"Mercado HT encontrado ('{market.get('name')}'), mas a linha 'Over 0.5' não estava presente.")
                         
-                        logger.warning(f"⚠️ Nenhuma odd Over 0.5 HT encontrada para fixture {fixture_id}")
-                        
+                        logger.warning(f"⚠️ Fixture {fixture_id} processado, mas nenhuma odd 'Over 0.5 HT' foi encontrada em nenhum dos {len(bookmakers)} bookmakers.")
+
                     else:
-                        logger.warning(f"⚠️ API não retornou dados para fixture {fixture_id}")
-                        logger.info(f"📊 Results: {data_odds.get('results', 0)}")
-                        
-                elif resp_odds.status == 404:
-                    logger.warning(f"⚠️ Fixture {fixture_id} não encontrado no /odds/live")
-                    
+                        logger.warning(f"⚠️ API /odds/live não retornou dados para o fixture {fixture_id} (results: 0). O jogo pode não ter odds ao vivo.")
                 else:
                     logger.error(f"❌ Erro na API /odds/live: Status {resp_odds.status}")
-                    error_text = await resp_odds.text()
-                    logger.error(f"❌ Resposta: {error_text}")
-                    
+    
     except Exception as e:
         logger.error(f"❌ Erro crítico em buscar_odd_ht: {e}")
         import traceback
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
-        
-    return odd_ht, fixture_id
-
-
-async def verificar_status_jogo(fixture_id: int) -> str:
-    """
-    Verifica o status atual do jogo
-    """
-    headers = {"x-apisports-key": FOOTBALL_API_KEY}
-    url = f"https://v3.football.api-sports.io/fixtures"
-    params = {"id": str(fixture_id)}
     
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, params=params) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    if data.get('response'):
-                        fixture_info = data['response'][0]
-                        fixture_data = fixture_info.get('fixture', {})
-                        status = fixture_data.get('status', {})
-                        status_short = status.get('short', 'N/A')
-                        status_long = status.get('long', 'N/A')
-                        
-                        # Informações do jogo
-                        home_team = fixture_info.get('teams', {}).get('home', {}).get('name', 'N/A')
-                        away_team = fixture_info.get('teams', {}).get('away', {}).get('name', 'N/A')
-                        league = fixture_info.get('league', {}).get('name', 'N/A')
-                        
-                        logger.info(f"🎮 Jogo: {home_team} vs {away_team}")
-                        logger.info(f"🏆 Liga: {league}")
-                        logger.info(f"📊 Status: {status_short} - {status_long}")
-                        
-                        return status_short
-                        
-    except Exception as e:
-        logger.error(f"❌ Erro ao verificar status: {e}")
-    
-    return "N/A"
+    return "N/D", fixture_id
 
 # Função auxiliar para verificar se o jogo está realmente ao vivo
 async def verificar_status_jogo(fixture_id: int) -> str:
