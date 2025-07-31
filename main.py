@@ -468,6 +468,11 @@ async def processar_sinal_ct(texto_original):
         if not evento_match or not selecao_match:
             logger.warning("Sinal (CT) sem 'Evento' ou 'Seleção'. Abortando.")
             return
+            # <<< NOVO: Adicionamos o filtro aqui >>>
+        selecao_completa = selecao_match.group(1).strip()
+        if "1221386" in selecao_completa:
+            logger.info(f"🚫 Sinal (CT) com código de restrição '1221386' ignorado.")
+            return # Para a execução imediatamente
         evento = evento_match.group(1).strip()
         selecao_texto = selecao_match.group(1).strip().split('|')[0].strip()
         goal_line_match = re.search(r"([\d.]+)", selecao_texto)
