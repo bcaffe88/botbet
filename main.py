@@ -9,6 +9,7 @@ from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
 import aiohttp
+import traceback
 
 # Configurar logging
 logging.basicConfig(
@@ -144,11 +145,8 @@ def analisar_clima(texto):
     logger.info(f"🌤️ Pontuação Climática Final: {pontos_clima}/4 - {status_clima}")
     return pontos_clima, criterios_clima, status_clima
 
-# --- NOVO SISTEMA DE BUSCA DE ODDS (2 FUNÇÕES) ---
 async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
-    """
-    Busca a odd para Over 0.5 HT APENAS EM JOGOS AO VIVO usando o endpoint /odds/live
-    """
+    # (Esta é a versão de depuração que você pediu para manter)
     odd_ht = "N/D"
     fixture_id = await buscar_fixture_id(nome_jogo)
     if not fixture_id:
@@ -159,7 +157,6 @@ async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
     params = {"fixture": str(fixture_id)}
     
     logger.info(f"🔎 Buscando APENAS odds AO VIVO para Fixture ID: {fixture_id}")
-    
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url_odds, headers=headers, params=params) as resp_odds:
@@ -167,148 +164,46 @@ async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
                     data_odds = await resp_odds.json()
                     logger.info(f"📋 RESPOSTA COMPLETA /odds/live: {data_odds}")
                     
-                    # Verificar status do jogo
-                    status_jogo = await verificar_status_jogo(fixture_id)
-                    logger.info(f"🎮 Status atual do jogo: {status_jogo}")
-                    
                     if data_odds.get('results', 0) > 0 and data_odds.get('response'):
                         response_list = data_odds['response']
-                        
                         if not response_list:
                             logger.warning("⚠️ Lista de resposta vazia do /odds/live")
                             return "N/D", fixture_id
                         
-                        logger.info(f"📊 Total de fixtures retornados: {len(response_list)}")
+                        fixture_data = response_list[0]
+                        bookmakers = fixture_data.get('bookmakers', [])
                         
-                        # Processar cada fixture
-                        for fixture_data in response_list:
-                            fixture_response_id = fixture_data.get('fixture', {}).get('id')
-                            logger.info(f"🎯 Processando fixture {fixture_response_id}")
-                            
-                            # Verificar se é o fixture correto
-                            if str(fixture_response_id) != str(fixture_id):
-                                logger.info(f"⏭️ Pulando fixture {fixture_response_id}")
-                                continue
+                        if not bookmakers:
+                            logger.warning(f"⚠️ Nenhum bookmaker encontrado para fixture {fixture_id}")
+                            return "N/D", fixture_id
+                        
+                        for bookmaker in bookmakers:
+                            for market in bookmaker.get('bets', []):
+                                market_name = market.get('name', '').lower()
                                 
-                            # A estrutura real tem 'odds' diretamente, não 'bookmakers'
-                            odds_markets = fixture_data.get('odds', [])
-                            logger.info(f"📊 Total de mercados: {len(odds_markets)}")
-                            
-                            if not odds_markets:
-                                logger.warning(f"⚠️ Nenhum mercado encontrado para fixture {fixture_id}")
-                                continue
-                            
-                            # Percorrer todos os mercados
-                            for i, market in enumerate(odds_markets):
-                                market_name = market.get('name', f'Market_{i}')
-                                market_id = str(market.get('id', ''))
+                                ht_indicators = ['first half', '1st half', 'half time', 'ht', '1h', 'primeiro tempo', 'intervalo', '1º tempo']
+                                goals_indicators = ['over/under', 'total', 'goals', 'gols', 'line']
+                                over_05_patterns = ['over 0.5', 'over 0,5', 'mais 0.5', 'mais 0,5', '> 0.5', '> 0,5']
                                 
-                                logger.info(f"📈 [{i+1}] Mercado: '{market_name}' (ID: {market_id})")
-                                
-                                # Listar valores do mercado
-                                values = market.get('values', [])
-                                for k, value in enumerate(values):
-                                    value_name = value.get('value', f'Value_{k}')
-                                    odd_value = value.get('odd', 'N/A')
-                                    handicap = value.get('handicap', '')
-                                    logger.info(f"    💰 [{k+1}] '{value_name}' handicap='{handicap}' = {odd_value}")
-                                
-                                # Buscar mercados HT
-                                market_name_lower = market_name.lower()
-                                
-                                # Palavras-chave para HT
-                                ht_keywords = ['first half', '1st half', 'half time', 'half-time', 'ht', '1h', 'primeiro tempo', 'meio tempo', 'half']
-                                
-                                # IDs conhecidos para mercados HT
-                                ht_market_ids = ['8', '9', '25', '26', '27', '28', '49', '24']
-                                
-                                # Verificar se é mercado HT
-                                has_ht_keyword = any(kw in market_name_lower for kw in ht_keywords)
-                                is_ht_market_id = market_id in ht_market_ids
-                                
-                                if has_ht_keyword or is_ht_market_id:
-                                    logger.info(f"🎯 MERCADO HT ENCONTRADO: '{market_name}' (ID: {market_id})")
-                                    
-                                    # Buscar Over 0.5
-                                    for value in values:
-                                        value_name = value.get('value', '').lower()
-                                        odd_value = value.get('odd')
-                                        handicap = str(value.get('handicap', ''))
-                                        
-                                        # Verificar se é Over 0.5
-                                        is_over = 'over' in value_name
-                                        is_05_handicap = handicap == '0.5' or handicap == '0,5'
-                                        
-                                        # Padrões no nome
-                                        over_patterns = ['over 0.5', 'over 0,5', 'over0.5', 'over0,5', 'mais 0.5', 'mais 0,5']
-                                        has_over_pattern = any(pattern in value_name for pattern in over_patterns)
-                                        
-                                        # Se é Over 0.5
-                                        if has_over_pattern or (is_over and is_05_handicap):
-                                            logger.info(f"🎉 OVER 0.5 HT ENCONTRADO! Odd: {odd_value} | Mercado: '{market_name}' | Valor: '{value.get('value')}' | Handicap: '{handicap}'")
+                                if any(kw in market_name for kw in ht_indicators) and any(kw in market_name for kw in goals_indicators):
+                                    logger.info(f"🎯 Mercado HT compatível encontrado: '{market.get('name')}' (Casa: {bookmaker.get('name')})")
+                                    for value in market.get('values', []):
+                                        value_name = value.get('value', '').lower().replace(',', '.')
+                                        if any(pattern in value_name for pattern in over_05_patterns):
+                                            odd_value = value.get('odd')
+                                            logger.info(f"🎉 OVER 0.5 HT ENCONTRADO! Odd: {odd_value}")
                                             return str(odd_value), fixture_id
-                                        
-                                        # Log valores interessantes
-                                        if '0.5' in value_name or '0,5' in value_name or handicap in ['0.5', '0,5']:
-                                            logger.info(f"🔍 Valor interessante: '{value.get('value')}' handicap='{handicap}' = {odd_value}")
                         
-                        logger.warning(f"⚠️ Nenhuma odd Over 0.5 HT encontrada para fixture {fixture_id}")
-                        
+                        logger.warning(f"⚠️ Fixture {fixture_id} processado, mas nenhuma odd 'Over 0.5 HT' foi encontrada.")
                     else:
-                        logger.warning(f"⚠️ API não retornou dados para fixture {fixture_id}")
-                        logger.info(f"📊 Results: {data_odds.get('results', 0)}")
-                        
-                elif resp_odds.status == 404:
-                    logger.warning(f"⚠️ Fixture {fixture_id} não encontrado no /odds/live")
-                    
+                        logger.warning(f"⚠️ API /odds/live não retornou dados para fixture {fixture_id} (results: 0).")
                 else:
                     logger.error(f"❌ Erro na API /odds/live: Status {resp_odds.status}")
-                    error_text = await resp_odds.text()
-                    logger.error(f"❌ Resposta: {error_text}")
-                    
     except Exception as e:
         logger.error(f"❌ Erro crítico em buscar_odd_ht: {e}")
-        import traceback
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
-        
-    return odd_ht, fixture_id
-
-
-async def verificar_status_jogo(fixture_id: int) -> str:
-    """
-    Verifica o status atual do jogo
-    """
-    headers = {"x-apisports-key": FOOTBALL_API_KEY}
-    url = f"https://v3.football.api-sports.io/fixtures"
-    params = {"id": str(fixture_id)}
     
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, params=params) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    if data.get('response'):
-                        fixture_info = data['response'][0]
-                        fixture_data = fixture_info.get('fixture', {})
-                        status = fixture_data.get('status', {})
-                        status_short = status.get('short', 'N/A')
-                        status_long = status.get('long', 'N/A')
-                        
-                        # Informações do jogo
-                        home_team = fixture_info.get('teams', {}).get('home', {}).get('name', 'N/A')
-                        away_team = fixture_info.get('teams', {}).get('away', {}).get('name', 'N/A')
-                        league = fixture_info.get('league', {}).get('name', 'N/A')
-                        
-                        logger.info(f"🎮 Jogo: {home_team} vs {away_team}")
-                        logger.info(f"🏆 Liga: {league}")
-                        logger.info(f"📊 Status: {status_short} - {status_long}")
-                        
-                        return status_short
-                        
-    except Exception as e:
-        logger.error(f"❌ Erro ao verificar status: {e}")
-    
-    return "N/A"
+    return "N/D", fixture_id
 
 async def tarefa_veredito_por_id(fixture_id, msg_original):
     resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"
@@ -327,22 +222,19 @@ async def tarefa_veredito_por_id(fixture_id, msg_original):
                         gols_fora = fixture.get('score', {}).get('halftime', {}).get('away')
                         if gols_casa is not None and gols_fora is not None:
                             gols_ht = gols_casa + gols_fora
-                            logger.info(f"📊 [0.5 HT] Veredito para {fixture_id}: {gols_ht} gols no HT")
                             resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅" if gols_ht >= 1 else "R E D ❌"
                         else: logger.warning(f"⚠️ [0.5 HT] Dados de gols no HT indisponíveis para fixture {fixture_id}.")
                     else: logger.warning(f"⚠️ [0.5 HT] API não retornou dados para fixture {fixture_id} na verificação.")
                 else:
-                    logger.error(f"❌ [0.5 HT] Erro na API ao buscar veredito para {fixture_id}: Status {resp.status}")
                     resultado_final = "⏳ ERRO NA API"
     except asyncio.CancelledError:
         logger.info(f"Tarefa de veredito (0.5 HT) para fixture {fixture_id} foi cancelada.")
         raise
     except Exception as e:
-        logger.error(f"❌ [0.5 HT] Erro crítico na tarefa de veredito para fixture {fixture_id}: {e}")
+        logger.error(f"❌ [0.5 HT] Erro crítico na tarefa de veredito: {e}")
         resultado_final = "⏳ ERRO AO VERIFICAR"
     finally:
         if not asyncio.current_task().cancelled():
-            logger.info(f"✅ [0.5 HT] Editando mensagem para fixture {fixture_id} com resultado: {resultado_final}")
             novo_texto = f"{msg_original.text}\n\n───────────────\n{resultado_final}"
             try:
                 await bot.edit_message_text(chat_id=CHAT_ID_DESTINO, message_id=msg_original.message_id, text=novo_texto, parse_mode='Markdown')
@@ -354,10 +246,9 @@ async def analisar(texto):
     try:
         jogo_match = re.search(r'⚽️\s*(.+)', texto)
         jogo = jogo_match.group(1).strip() if jogo_match else "Times não identificados"
-        # Verifica se 'U20' (em maiúsculas ou minúsculas) está no nome do jogo
         if "U20" in jogo.upper():
             logger.info(f"🚫 Sinal para jogo U20 ('{jogo}') ignorado conforme regra.")
-            return # Para a execução imediatamente
+            return
             
         logger.info(f"📌 Jogo detectado: {jogo}")
         minuto_match = re.search(r"⏰\s*(\d+)", texto)
@@ -438,29 +329,30 @@ async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
                         gols_fora = fixture.get('score', {}).get('fulltime', {}).get('away')
                         if gols_casa is not None and gols_fora is not None:
                             total_gols = gols_casa + gols_fora
-                            logger.info(f"📊 [CT Over {goal_line}] Veredito para {fixture_id}: Total de Gols={total_gols}")
                             resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅" if total_gols > goal_line else "R E D ❌"
-                        else: logger.warning(f"⚠️ [CT Over {goal_line}] Dados de gols FT indisponíveis para fixture {fixture_id}.")
-                    else: logger.warning(f"⚠️ [CT Over {goal_line}] API não retornou dados para fixture {fixture_id} na verificação.")
+                        else: logger.warning(f"⚠️ [CT Over {goal_line}] Dados de gols FT indisponíveis.")
+                    else: logger.warning(f"⚠️ [CT Over {goal_line}] API não retornou dados para fixture.")
                 else:
-                    logger.error(f"❌ [CT Over {goal_line}] Erro na API ao buscar veredito para {fixture_id}: Status {resp.status}")
                     resultado_final = "⏳ ERRO NA API"
     except asyncio.CancelledError:
         logger.info(f"Tarefa de veredito (CT) para fixture {fixture_id} foi cancelada.")
         raise
     except Exception as e:
-        logger.error(f"❌ [CT Over {goal_line}] Erro crítico na tarefa de veredito para fixture {fixture_id}: {e}")
+        logger.error(f"❌ [CT Over {goal_line}] Erro na tarefa de veredito: {e}")
         resultado_final = "⏳ ERRO AO VERIFICAR"
     finally:
         if not asyncio.current_task().cancelled():
-            logger.info(f"✅ [CT Over {goal_line}] Editando mensagem para fixture {fixture_id} com resultado: {resultado_final}")
             novo_texto = f"{msg_original.text}\n\n───────────────\n{resultado_final}"
             try:
                 await bot.edit_message_text(chat_id=CHAT_ID_DESTINO, message_id=msg_original.message_id, text=novo_texto)
             except Exception as edit_error:
-                logger.error(f"❌ Falha ao editar mensagem (CT) para fixture {fixture_id}: {edit_error}")
+                logger.error(f"❌ Falha ao editar mensagem (CT): {edit_error}")
 
 async def processar_sinal_ct(texto_original):
+    ID_PARA_IGNORAR = "1221386"
+    if ID_PARA_IGNORAR in texto_original:
+        logger.info(f"🚫 Sinal (CT) ignorado pois contém o ID de Seleção proibido: {ID_PARA_IGNORAR}")
+        return
     logger.info("(CT) Over Gol: Iniciando processamento do sinal.")
     try:
         evento_match = re.search(r"Evento:\s*(.+)", texto_original)
@@ -468,12 +360,10 @@ async def processar_sinal_ct(texto_original):
         if not evento_match or not selecao_match:
             logger.warning("Sinal (CT) sem 'Evento' ou 'Seleção'. Abortando.")
             return
-            # <<< NOVO: Adicionamos o filtro aqui >>>
-        selecao_completa = selecao_match.group(1).strip()
-        if "1221386" in selecao_completa:
-            logger.info(f"🚫 Sinal (CT) com código de restrição '1221386' ignorado.")
-            return # Para a execução imediatamente
         evento = evento_match.group(1).strip()
+        if "U20" in evento.upper():
+            logger.info(f"🚫 Sinal (CT) para jogo U20 ('{evento}') ignorado.")
+            return
         selecao_texto = selecao_match.group(1).strip().split('|')[0].strip()
         goal_line_match = re.search(r"([\d.]+)", selecao_texto)
         if not goal_line_match:
