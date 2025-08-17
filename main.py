@@ -146,7 +146,6 @@ def analisar_clima(texto):
     return pontos_clima, criterios_clima, status_clima
 
 async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
-    # (Esta é a versão de depuração que você pediu para manter)
     odd_ht = "N/D"
     fixture_id = await buscar_fixture_id(nome_jogo)
     if not fixture_id:
@@ -231,7 +230,7 @@ async def tarefa_veredito_por_id(fixture_id, msg_original):
         logger.info(f"Tarefa de veredito (0.5 HT) para fixture {fixture_id} foi cancelada.")
         raise
     except Exception as e:
-        logger.error(f"❌ [0.5 HT] Erro crítico na tarefa de veredito: {e}")
+        logger.error(f"❌ [0.5 HT] Erro crítico na tarefa de veredito para fixture {fixture_id}: {e}")
         resultado_final = "⏳ ERRO AO VERIFICAR"
     finally:
         if not asyncio.current_task().cancelled():
@@ -408,11 +407,16 @@ async def roteador_de_sinais(event):
         conteudo = event.message.message
         if not conteudo:
             return
+        ESTRATEGIAS_DE_ENCAMINHAMENTO = [
+            "Estratégia: (CT) Over Gol",
+            "Estratégia: Over HT/FT ✅"
+        ]
         if "OVER 0.5 HT" in conteudo and "Inteligência Artificial" in conteudo:
             logger.info("Sinal 'OVER 0.5 HT' detectado. Roteando para análise principal.")
             await analisar(conteudo)
-        elif "Estratégia: (CT) Over Gol" in conteudo:
-            logger.info("Sinal '(CT) Over Gol' detectado. Roteando para processador CT.")
+        elif any(estrategia in conteudo for estrategia in ESTRATEGIAS_DE_ENCAMINHAMENTO):
+            matched_strategy = next((s for s in ESTRATEGIAS_DE_ENCAMINHAMENTO if s in conteudo), "N/A")
+            logger.info(f"Sinal de encaminhamento '{matched_strategy}' detectado. Roteando para processador CT.")
             await processar_sinal_ct(conteudo)
     except Exception as e:
         logger.error(f"Erro no roteador de sinais: {e}")
