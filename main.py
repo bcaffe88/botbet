@@ -409,7 +409,7 @@ async def roteador_de_sinais(event):
             return
         ESTRATEGIAS_DE_ENCAMINHAMENTO = [
             "Estratégia: (CT) Over Gol",
-            "Estratégia: Over HT/FT ✅"
+            "Estratégia: Over HT/FT"
         ]
         if "OVER 0.5 HT" in conteudo and "Inteligência Artificial" in conteudo:
             logger.info("Sinal 'OVER 0.5 HT' detectado. Roteando para análise principal.")
