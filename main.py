@@ -293,7 +293,7 @@ async def analisar(texto):
             resumo_clima = f" {status_clima} ({pontos_clima}/4pts)"
             resumo_tecnico = f" {pontos_tecnicos}/10pts"
             msg = f"""⚽️ {veredito}
-🏟️ {jogo}
+🏟️ *{jogo}*
 🤖 OVERBOT ANÁLISE:
 ⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} 
 🌤️ CLIMA: {resumo_clima}
@@ -315,7 +315,7 @@ async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
     resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"
     try:
         logger.info(f"⏰ [CT Over {goal_line}] Aguardando 45 min para veredito do fixture ID: {fixture_id}")
-        await asyncio.sleep(2700)
+        await asyncio.sleep(3600)
         headers = {"x-apisports-key": FOOTBALL_API_KEY}
         url = f"https://v3.football.api-sports.io/fixtures?id={fixture_id}"
         async with aiohttp.ClientSession() as session:
@@ -377,8 +377,8 @@ async def processar_sinal_ct(texto_original):
         tipo_match = re.search(r"Tipo:\s*(.+)", texto_original)
         estrategia_match = re.search(r"Estratégia:\s*(.+)", texto_original)
         mercado_texto = mercado_match.group(1).strip().split('|')[0].strip() if mercado_match else "N/A"
-        msg_formatada = f"""ANÁLISE OVERBOT VIP CT
-Evento: {evento}
+        msg_formatada = f"""ANÁLISE OVERBOT VIP
+Evento: *{evento}*
 Competição: {competicao_match.group(1).strip() if competicao_match else 'N/A'}
 
 Mercado: {mercado_texto}
