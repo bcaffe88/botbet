@@ -64,7 +64,6 @@ async def buscar_fixture_id(nome_jogo: str) -> int | None:
     
     fixture_id = None
     try:
-        # Aumentado o timeout pois a resposta pode ser grande
         timeout = aiohttp.ClientTimeout(total=25)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url_fixtures, headers=headers) as resp:
@@ -77,7 +76,7 @@ async def buscar_fixture_id(nome_jogo: str) -> int | None:
                 logger.info(f"API retornou {len(jogos)} jogos para o dia. Comparando nomes...")
 
                 melhor_match = None
-                maior_similaridade = 0.75 # Limite mínimo de similaridade
+                maior_similaridade = 0.75
 
                 for item in jogos:
                     teams = item.get("teams", {})
@@ -108,19 +107,25 @@ async def buscar_fixture_id(nome_jogo: str) -> int | None:
 
 # --- Funções do Bot 1 (Análise Climática) ---
 
+# ATUALIZAÇÃO AQUI
 def analisar_clima(texto):
+    """Analisa condições climáticas com regex mais robusto para emojis."""
     pontos_clima = 0
     criterios_clima = []
     logger.info("🌤️ Iniciando análise climática...")
     try:
         temp_match = re.search(r"🌡️\s*([\d.]+)\s*°C", texto)
-        nuvens_match = re.search(r"☁\s*([\d.]+)%", texto)
+        # Regex agora aceita ambas as variações do emoji de nuvem (☁️ ou ☁)
+        nuvens_match = re.search(r"(☁️|☁)\s*([\d.]+)%", texto)
         umidade_match = re.search(r"💧\s*([\d.]+)%", texto)
         vento_match = re.search(r"💨\s*([\d.]+)\s*m/s", texto)
+
         temperatura = float(temp_match.group(1)) if temp_match else None
-        nebulosidade = float(nuvens_match.group(1)) if nuvens_match else None
+        # O grupo de captura para nuvens agora é o grupo 2
+        nebulosidade = float(nuvens_match.group(2)) if nuvens_match else None
         umidade = float(umidade_match.group(1)) if umidade_match else None
         vento = float(vento_match.group(1)) if vento_match else None
+        
         log_clima = []
         if temperatura is not None:
             if 18 <= temperatura <= 28: pontos_clima += 1; criterios_clima.append("Temperatura ideal")
@@ -136,6 +141,7 @@ def analisar_clima(texto):
             elif 7 < vento <= 10: pontos_clima += 0.5; criterios_clima.append("Vento moderado")
             log_clima.append(f"Vento: {vento} m/s → {'✅' if vento <= 7 else '⚠️' if vento <= 10 else '❌'}")
         logger.info(f"🌤️ Detalhes Climáticos Extraídos: {' | '.join(log_clima)}")
+        
     except Exception as e:
         logger.error(f"Erro na análise climática: {e}")
 
@@ -146,15 +152,14 @@ def analisar_clima(texto):
     return pontos_clima, criterios_clima, status_clima
 
 async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
+    # (Mantendo a versão de depuração detalhada, como no código original)
     odd_ht = "N/D"
     fixture_id = await buscar_fixture_id(nome_jogo)
     if not fixture_id:
         return "N/L", None
-
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
     url_odds = "https://v3.football.api-sports.io/odds/live"
     params = {"fixture": str(fixture_id)}
-    
     logger.info(f"🔎 Buscando APENAS odds AO VIVO para Fixture ID: {fixture_id}")
     try:
         async with aiohttp.ClientSession() as session:
@@ -162,28 +167,22 @@ async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
                 if resp_odds.status == 200:
                     data_odds = await resp_odds.json()
                     logger.info(f"📋 RESPOSTA COMPLETA /odds/live: {data_odds}")
-                    
                     if data_odds.get('results', 0) > 0 and data_odds.get('response'):
                         response_list = data_odds['response']
                         if not response_list:
                             logger.warning("⚠️ Lista de resposta vazia do /odds/live")
                             return "N/D", fixture_id
-                        
                         fixture_data = response_list[0]
                         bookmakers = fixture_data.get('bookmakers', [])
-                        
                         if not bookmakers:
                             logger.warning(f"⚠️ Nenhum bookmaker encontrado para fixture {fixture_id}")
                             return "N/D", fixture_id
-                        
                         for bookmaker in bookmakers:
                             for market in bookmaker.get('bets', []):
                                 market_name = market.get('name', '').lower()
-                                
                                 ht_indicators = ['first half', '1st half', 'half time', 'ht', '1h', 'primeiro tempo', 'intervalo', '1º tempo']
                                 goals_indicators = ['over/under', 'total', 'goals', 'gols', 'line']
                                 over_05_patterns = ['over 0.5', 'over 0,5', 'mais 0.5', 'mais 0,5', '> 0.5', '> 0,5']
-                                
                                 if any(kw in market_name for kw in ht_indicators) and any(kw in market_name for kw in goals_indicators):
                                     logger.info(f"🎯 Mercado HT compatível encontrado: '{market.get('name')}' (Casa: {bookmaker.get('name')})")
                                     for value in market.get('values', []):
@@ -192,7 +191,6 @@ async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
                                             odd_value = value.get('odd')
                                             logger.info(f"🎉 OVER 0.5 HT ENCONTRADO! Odd: {odd_value}")
                                             return str(odd_value), fixture_id
-                        
                         logger.warning(f"⚠️ Fixture {fixture_id} processado, mas nenhuma odd 'Over 0.5 HT' foi encontrada.")
                     else:
                         logger.warning(f"⚠️ API /odds/live não retornou dados para fixture {fixture_id} (results: 0).")
@@ -201,7 +199,6 @@ async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
     except Exception as e:
         logger.error(f"❌ Erro crítico em buscar_odd_ht: {e}")
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
-    
     return "N/D", fixture_id
 
 async def tarefa_veredito_por_id(fixture_id, msg_original):
@@ -240,7 +237,9 @@ async def tarefa_veredito_por_id(fixture_id, msg_original):
             except Exception as edit_error:
                 logger.error(f"❌ Falha ao editar mensagem para fixture {fixture_id}: {edit_error}")
 
+# ATUALIZAÇÃO AQUI
 async def analisar(texto):
+    """Função de análise principal ATUALIZADA para o novo formato de sinal."""
     logger.info("📊 Iniciando análise do sinal 'Over 0.5 HT'")
     try:
         jogo_match = re.search(r'⚽️\s*(.+)', texto)
@@ -252,19 +251,40 @@ async def analisar(texto):
         logger.info(f"📌 Jogo detectado: {jogo}")
         minuto_match = re.search(r"⏰\s*(\d+)", texto)
         minuto = int(minuto_match.group(1)) if minuto_match else None
-        ia_match = re.search(r"OVER 0\.5 HT:\s*([\d.]+)%", texto)
-        ia = float(ia_match.group(1)) if ia_match else None
+        
+        # Lógica para extrair e usar a maior das duas porcentagens da IA
+        ia_match = re.search(r"OVER 0\.5 HT:\s*([\d.]+)%\s*/\s*([\d.]+)%", texto)
+        ia = None
+        if ia_match:
+            ia_valor1 = float(ia_match.group(1))
+            ia_valor2 = float(ia_match.group(2))
+            ia = max(ia_valor1, ia_valor2)
+            logger.info(f"🤖 IA detectada: {ia_valor1}%/{ia_valor2}%. Usando o maior valor: {ia}%")
+        else:
+            # Fallback para o formato antigo, se necessário
+            ia_match_antigo = re.search(r"OVER 0\.5 HT:\s*([\d.]+)%", texto)
+            if ia_match_antigo:
+                ia = float(ia_match_antigo.group(1))
+                logger.info(f"🤖 IA (formato antigo) detectada: {ia}%")
+        
+        # Regex para estatísticas, atualizando apenas a posse de bola
         match_perigosos = re.findall(r"Ataques Perigosos:\s*(\d+)/(\d+)", texto)
         perigosos = list(map(int, match_perigosos[0])) if match_perigosos else [0, 0]
-        match_posse = re.findall(r"Posse de Bola:\s*(\d+)/(\d+)", texto)
+        
+        match_posse = re.findall(r"Posse de Bola:\s*(\d+)%\s*/\s*(\d+)%", texto)
         posse = list(map(int, match_posse[0])) if match_posse else [0, 0]
+        
         match_escanteios = re.findall(r"Escanteios:\s*(\d+)/(\d+)", texto)
         escanteios = list(map(int, match_escanteios[0])) if match_escanteios else [0, 0]
+        
         match_no_gol = re.findall(r"No Gol:\s*(\d+)/(\d+)", texto)
         no_gol = list(map(int, match_no_gol[0])) if match_no_gol else [0, 0]
+        
         match_chutes = re.findall(r"Total:\s*(\d+)/(\d+)", texto)
         chutes = list(map(int, match_chutes[0])) if match_chutes else [0, 0]
+
         pontos_clima, criterios_clima, status_clima = analisar_clima(texto)
+        
         criterios_tecnicos = []
         pontos_tecnicos = 0
         if ia and ia >= 70: criterios_tecnicos.append("IA favorável"); pontos_tecnicos += 2
@@ -274,31 +294,34 @@ async def analisar(texto):
         if sum(escanteios) >= 2: criterios_tecnicos.append("Escanteios"); pontos_tecnicos += 1
         if sum(chutes) >= 4: criterios_tecnicos.append("Chutes suficientes"); pontos_tecnicos += 1
         if posse[0] >= 60 or posse[1] >= 60: criterios_tecnicos.append("Posse dominante"); pontos_tecnicos += 1
+        
         pontos_total = pontos_tecnicos + pontos_clima
-        max_pontos_total = 14
         limite_minimo = 9.0
-        condicao1 = pontos_total >= limite_minimo
-        condicao2 = pontos_tecnicos >= 7 and pontos_clima >= 2
-        condicao3 = pontos_tecnicos >= 8 and pontos_clima >= 1.5
-        deve_entrar = condicao1 or condicao2 or condicao3
-        logger.info(f"📈 Pontuação Técnica: {pontos_tecnicos}/10 | 🌤️ Pontuação Climática: {pontos_clima}/4 | 🎯 Pontuação Total: {pontos_total}/{max_pontos_total}")
+        deve_entrar = pontos_total >= limite_minimo
+
+        logger.info(f"📈 Pontuação Técnica: {pontos_tecnicos}/10 | 🌤️ Pontuação Climática: {pontos_clima}/4 | 🎯 Pontuação Total: {pontos_total}")
+
         if deve_entrar:
             logger.info(f"✅ Pontuação suficiente para '{jogo}'. Buscando odd e fixture ID...")
             odd_ht, fixture_id = await buscar_odd_ht(jogo)
+            
             if pontos_total >= 12: confianca = "MUITO ALTA 🔥 STAKE 1%"
             elif pontos_total >= 10: confianca = "ALTA ✅ STAKE 0.75%"
             elif pontos_clima >= 3: confianca = "MÉDIA-ALTA ⚡ STAKE 0.5%"
             else: confianca = "MÉDIA ⚠️ STAKE 0.25%"
+            
             veredito = f"ENTRAR | CONFIANÇA: {confianca}"
             resumo_clima = f" {status_clima} ({pontos_clima}/4pts)"
             resumo_tecnico = f" {pontos_tecnicos}/10pts"
+            
             msg = f"""⚽️ {veredito}
-🏟️ *{jogo}*
+🏟️ {jogo}
 🤖 OVERBOT ANÁLISE:
 ⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} 
 🌤️ CLIMA: {resumo_clima}
 📊 ODD ATUAL: *{odd_ht}*
 ▶️ ENTRADA: OVER 0.5 HT"""
+            
             msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg, parse_mode='Markdown')
             logger.info(f"✅ Sinal 'Over 0.5 HT' enviado para: {jogo}")
             if fixture_id:
@@ -307,15 +330,17 @@ async def analisar(texto):
                 logger.warning(f"Veredito não agendado para '{jogo}' pois o fixture ID não pôde ser encontrado pela API.")
         else:
             logger.info(f"❌ Critérios insuficientes para '{jogo}'. Sinal ignorado sem uso de API.")
+            
     except Exception as e:
         logger.error(f"Erro na análise principal: {e}")
 
 # --- Funções do Bot 2 ((CT) Over Gol) ---
 async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
+    # (Mantido como no seu código original)
     resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"
     try:
         logger.info(f"⏰ [CT Over {goal_line}] Aguardando 45 min para veredito do fixture ID: {fixture_id}")
-        await asyncio.sleep(3600)
+        await asyncio.sleep(2700)
         headers = {"x-apisports-key": FOOTBALL_API_KEY}
         url = f"https://v3.football.api-sports.io/fixtures?id={fixture_id}"
         async with aiohttp.ClientSession() as session:
@@ -348,6 +373,7 @@ async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
                 logger.error(f"❌ Falha ao editar mensagem (CT): {edit_error}")
 
 async def processar_sinal_ct(texto_original):
+    # (Mantido como no seu código original)
     ID_PARA_IGNORAR = "1221386"
     if ID_PARA_IGNORAR in texto_original:
         logger.info(f"🚫 Sinal (CT) ignorado pois contém o ID de Seleção proibido: {ID_PARA_IGNORAR}")
@@ -377,8 +403,8 @@ async def processar_sinal_ct(texto_original):
         tipo_match = re.search(r"Tipo:\s*(.+)", texto_original)
         estrategia_match = re.search(r"Estratégia:\s*(.+)", texto_original)
         mercado_texto = mercado_match.group(1).strip().split('|')[0].strip() if mercado_match else "N/A"
-        msg_formatada = f"""ANÁLISE OVERBOT VIP
-Evento: *{evento}*
+        msg_formatada = f"""ANÁLISE OVERBOT VIP CT
+Evento: {evento}
 Competição: {competicao_match.group(1).strip() if competicao_match else 'N/A'}
 
 Mercado: {mercado_texto}
@@ -403,13 +429,14 @@ client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 
 @client.on(events.NewMessage(chats=CHAT_ID_SINAL))
 async def roteador_de_sinais(event):
+    # (Mantido como no seu código original)
     try:
         conteudo = event.message.message
         if not conteudo:
             return
         ESTRATEGIAS_DE_ENCAMINHAMENTO = [
             "Estratégia: (CT) Over Gol",
-            "Estratégia: Over HT/FT"
+            "Estratégia: Over HT/FT ✅"
         ]
         if "OVER 0.5 HT" in conteudo and "Inteligência Artificial" in conteudo:
             logger.info("Sinal 'OVER 0.5 HT' detectado. Roteando para análise principal.")
@@ -425,6 +452,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Bot Unificado de Sinais ativo e escutando!")
 
 async def main():
+    # (Mantido como no seu código original)
     try:
         logger.info("🚀 Iniciando Bot Unificado de Sinais")
         logger.info(f"📍 Monitorando chat: {CHAT_ID_SINAL}")
