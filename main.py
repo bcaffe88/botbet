@@ -129,8 +129,8 @@ def analisar_clima(texto):
             if 18 <= temperatura <= 28: pontos_clima += 1; criterios_clima.append("Temperatura ideal")
             log_clima.append(f"Temperatura: {temperatura}°C → {'✅' if 18 <= temperatura <= 28 else '❌'}")
         if nebulosidade is not None:
-            if 20 <= nebulosidade <= 70: pontos_clima += 1; criterios_clima.append("Nebulosidade ideal")
-            log_clima.append(f"Nebulosidade: {nebulosidade}% → {'✅' if 20 <= nebulosidade <= 70 else '❌'}")
+            if nebulosidade <= 20: pontos_clima += 1; criterios_clima.append("Nebulosidade ideal")
+            log_clima.append(f"Nebulosidade: {nebulosidade}% → {'✅' if nebulosidade >= 20 else '❌'}")
         if umidade is not None:
             if 50 <= umidade <= 75: pontos_clima += 1; criterios_clima.append("Umidade ideal")
             log_clima.append(f"Umidade: {umidade}% → {'✅' if 50 <= umidade <= 75 else '❌'}")
