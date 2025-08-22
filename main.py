@@ -107,7 +107,6 @@ async def buscar_fixture_id(nome_jogo: str) -> int | None:
 
 # --- Funções do Bot 1 (Análise Climática) ---
 
-# ATUALIZAÇÃO AQUI
 def analisar_clima(texto):
     """Analisa condições climáticas com regex mais robusto para emojis."""
     pontos_clima = 0
@@ -121,8 +120,7 @@ def analisar_clima(texto):
         vento_match = re.search(r"💨\s*([\d.]+)\s*m/s", texto)
 
         temperatura = float(temp_match.group(1)) if temp_match else None
-        # O grupo de captura para nuvens agora é o grupo 2
-        nebulosidade = float(nuvens_match.group(2)) if nuvens_match else None
+        nebulosidade = float(nuvens_match.group(2)) if nuvens_match else None # Grupo 2 para nuvens
         umidade = float(umidade_match.group(1)) if umidade_match else None
         vento = float(vento_match.group(1)) if vento_match else None
         
@@ -152,14 +150,16 @@ def analisar_clima(texto):
     return pontos_clima, criterios_clima, status_clima
 
 async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
-    # (Mantendo a versão de depuração detalhada, como no código original)
+    # (Mantendo a versão de depuração detalhada)
     odd_ht = "N/D"
     fixture_id = await buscar_fixture_id(nome_jogo)
     if not fixture_id:
         return "N/L", None
+
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
     url_odds = "https://v3.football.api-sports.io/odds/live"
     params = {"fixture": str(fixture_id)}
+    
     logger.info(f"🔎 Buscando APENAS odds AO VIVO para Fixture ID: {fixture_id}")
     try:
         async with aiohttp.ClientSession() as session:
@@ -167,22 +167,28 @@ async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
                 if resp_odds.status == 200:
                     data_odds = await resp_odds.json()
                     logger.info(f"📋 RESPOSTA COMPLETA /odds/live: {data_odds}")
+                    
                     if data_odds.get('results', 0) > 0 and data_odds.get('response'):
                         response_list = data_odds['response']
                         if not response_list:
                             logger.warning("⚠️ Lista de resposta vazia do /odds/live")
                             return "N/D", fixture_id
+                        
                         fixture_data = response_list[0]
                         bookmakers = fixture_data.get('bookmakers', [])
+                        
                         if not bookmakers:
                             logger.warning(f"⚠️ Nenhum bookmaker encontrado para fixture {fixture_id}")
                             return "N/D", fixture_id
+                        
                         for bookmaker in bookmakers:
                             for market in bookmaker.get('bets', []):
                                 market_name = market.get('name', '').lower()
+                                
                                 ht_indicators = ['first half', '1st half', 'half time', 'ht', '1h', 'primeiro tempo', 'intervalo', '1º tempo']
                                 goals_indicators = ['over/under', 'total', 'goals', 'gols', 'line']
                                 over_05_patterns = ['over 0.5', 'over 0,5', 'mais 0.5', 'mais 0,5', '> 0.5', '> 0,5']
+                                
                                 if any(kw in market_name for kw in ht_indicators) and any(kw in market_name for kw in goals_indicators):
                                     logger.info(f"🎯 Mercado HT compatível encontrado: '{market.get('name')}' (Casa: {bookmaker.get('name')})")
                                     for value in market.get('values', []):
@@ -191,6 +197,7 @@ async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
                                             odd_value = value.get('odd')
                                             logger.info(f"🎉 OVER 0.5 HT ENCONTRADO! Odd: {odd_value}")
                                             return str(odd_value), fixture_id
+                        
                         logger.warning(f"⚠️ Fixture {fixture_id} processado, mas nenhuma odd 'Over 0.5 HT' foi encontrada.")
                     else:
                         logger.warning(f"⚠️ API /odds/live não retornou dados para fixture {fixture_id} (results: 0).")
@@ -199,6 +206,7 @@ async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
     except Exception as e:
         logger.error(f"❌ Erro crítico em buscar_odd_ht: {e}")
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
+    
     return "N/D", fixture_id
 
 async def tarefa_veredito_por_id(fixture_id, msg_original):
@@ -239,50 +247,53 @@ async def tarefa_veredito_por_id(fixture_id, msg_original):
 
 # ATUALIZAÇÃO AQUI
 async def analisar(texto):
-    """Função de análise principal ATUALIZADA para o novo formato de sinal."""
+    """
+    Função de análise principal ATUALIZADA para o novo formato de sinal "bloco de texto",
+    com extração de dados robusta e economia de API.
+    """
     logger.info("📊 Iniciando análise do sinal 'Over 0.5 HT'")
     try:
+        # --- PASSO 1: Extrair o nome do jogo e aplicar filtros iniciais ---
         jogo_match = re.search(r'⚽️\s*(.+)', texto)
         jogo = jogo_match.group(1).strip() if jogo_match else "Times não identificados"
+        
         if "U20" in jogo.upper():
             logger.info(f"🚫 Sinal para jogo U20 ('{jogo}') ignorado conforme regra.")
             return
-            
-        logger.info(f"📌 Jogo detectado: {jogo}")
-        minuto_match = re.search(r"⏰\s*(\d+)", texto)
-        minuto = int(minuto_match.group(1)) if minuto_match else None
         
-        # Lógica para extrair e usar a maior das duas porcentagens da IA
+        logger.info(f"📌 Jogo detectado: {jogo}")
+
+        # --- PASSO 2: Extração de dados robusta para o novo formato ---
+        minuto = ia_valor1 = ia_valor2 = ataques1 = ataques2 = perigosos1 = perigosos2 = posse1 = posse2 = escanteios1 = escanteios2 = chutes1 = chutes2 = nogol1 = nogol2 = foragol1 = foragol2 = None
+
+        minuto_match = re.search(r"⏰\s*(\d+)", texto)
+        if minuto_match:
+            minuto = int(minuto_match.group(1))
+
         ia_match = re.search(r"OVER 0\.5 HT:\s*([\d.]+)%\s*/\s*([\d.]+)%", texto)
-        ia = None
         if ia_match:
-            ia_valor1 = float(ia_match.group(1))
-            ia_valor2 = float(ia_match.group(2))
-            ia = max(ia_valor1, ia_valor2)
-            logger.info(f"🤖 IA detectada: {ia_valor1}%/{ia_valor2}%. Usando o maior valor: {ia}%")
-        else:
-            # Fallback para o formato antigo, se necessário
+            ia_valor1, ia_valor2 = map(float, ia_match.groups())
+        else: # Fallback para o formato antigo
             ia_match_antigo = re.search(r"OVER 0\.5 HT:\s*([\d.]+)%", texto)
             if ia_match_antigo:
-                ia = float(ia_match_antigo.group(1))
-                logger.info(f"🤖 IA (formato antigo) detectada: {ia}%")
-        
-        # Regex para estatísticas, atualizando apenas a posse de bola
-        match_perigosos = re.findall(r"Ataques Perigosos:\s*(\d+)/(\d+)", texto)
-        perigosos = list(map(int, match_perigosos[0])) if match_perigosos else [0, 0]
-        
-        match_posse = re.findall(r"Posse de Bola:\s*(\d+)%\s*/\s*(\d+)%", texto)
-        posse = list(map(int, match_posse[0])) if match_posse else [0, 0]
-        
-        match_escanteios = re.findall(r"Escanteios:\s*(\d+)/(\d+)", texto)
-        escanteios = list(map(int, match_escanteios[0])) if match_escanteios else [0, 0]
-        
-        match_no_gol = re.findall(r"No Gol:\s*(\d+)/(\d+)", texto)
-        no_gol = list(map(int, match_no_gol[0])) if match_no_gol else [0, 0]
-        
-        match_chutes = re.findall(r"Total:\s*(\d+)/(\d+)", texto)
-        chutes = list(map(int, match_chutes[0])) if match_chutes else [0, 0]
+                ia_valor1 = float(ia_match_antigo.group(1))
 
+        eventos_match = re.search(r"Ataques:\s*(\d+)/(\d+)\s*Ataques Perigosos:\s*(\d+)/(\d+)\s*Posse de Bola:\s*(\d+)%\s*/\s*(\d+)%\s*Escanteios:\s*(\d+)/(\d+)", texto, re.DOTALL)
+        if eventos_match:
+            ataques1, ataques2, perigosos1, perigosos2, posse1, posse2, escanteios1, escanteios2 = map(int, eventos_match.groups())
+
+        chutes_match = re.search(r"Total:\s*(\d+)/(\d+)\s*No Gol:\s*(\d+)/(\d+)\s*Fora do Gol:\s*(\d+)/(\d+)", texto, re.DOTALL)
+        if chutes_match:
+            chutes1, chutes2, nogol1, nogol2, foragol1, foragol2 = map(int, chutes_match.groups())
+            
+        ia = max(ia_valor1 or 0, ia_valor2 or 0)
+        perigosos = [perigosos1 or 0, perigosos2 or 0]
+        posse = [posse1 or 0, posse2 or 0]
+        escanteios = [escanteios1 or 0, escanteios2 or 0]
+        no_gol = [nogol1 or 0, nogol2 or 0]
+        chutes = [chutes1 or 0, chutes2 or 0]
+
+        # --- PASSO 3: Lógica de Pontuação ---
         pontos_clima, criterios_clima, status_clima = analisar_clima(texto)
         
         criterios_tecnicos = []
@@ -299,8 +310,9 @@ async def analisar(texto):
         limite_minimo = 9.0
         deve_entrar = pontos_total >= limite_minimo
 
-        logger.info(f"📈 Pontuação Técnica: {pontos_tecnicos}/10 | 🌤️ Pontuação Climática: {pontos_clima}/4 | 🎯 Pontuação Total: {pontos_total}")
+        logger.info(f"📈 Pontos Técnicos: {pontos_tecnicos}/10 | 🌤️ Pontos Clima: {pontos_clima}/4 | 🎯 Total: {pontos_total}")
 
+        # --- PASSO 4: Se a pontuação for boa, SÓ ENTÃO busca a odd ---
         if deve_entrar:
             logger.info(f"✅ Pontuação suficiente para '{jogo}'. Buscando odd e fixture ID...")
             odd_ht, fixture_id = await buscar_odd_ht(jogo)
@@ -333,10 +345,10 @@ async def analisar(texto):
             
     except Exception as e:
         logger.error(f"Erro na análise principal: {e}")
+        logger.error(traceback.format_exc())
 
 # --- Funções do Bot 2 ((CT) Over Gol) ---
 async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
-    # (Mantido como no seu código original)
     resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"
     try:
         logger.info(f"⏰ [CT Over {goal_line}] Aguardando 45 min para veredito do fixture ID: {fixture_id}")
@@ -373,7 +385,6 @@ async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
                 logger.error(f"❌ Falha ao editar mensagem (CT): {edit_error}")
 
 async def processar_sinal_ct(texto_original):
-    # (Mantido como no seu código original)
     ID_PARA_IGNORAR = "1221386"
     if ID_PARA_IGNORAR in texto_original:
         logger.info(f"🚫 Sinal (CT) ignorado pois contém o ID de Seleção proibido: {ID_PARA_IGNORAR}")
@@ -429,7 +440,6 @@ client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 
 @client.on(events.NewMessage(chats=CHAT_ID_SINAL))
 async def roteador_de_sinais(event):
-    # (Mantido como no seu código original)
     try:
         conteudo = event.message.message
         if not conteudo:
@@ -452,7 +462,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Bot Unificado de Sinais ativo e escutando!")
 
 async def main():
-    # (Mantido como no seu código original)
     try:
         logger.info("🚀 Iniciando Bot Unificado de Sinais")
         logger.info(f"📍 Monitorando chat: {CHAT_ID_SINAL}")
