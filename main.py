@@ -64,6 +64,7 @@ async def buscar_fixture_id(nome_jogo: str) -> int | None:
     
     fixture_id = None
     try:
+        # Aumentado o timeout pois a resposta pode ser grande
         timeout = aiohttp.ClientTimeout(total=25)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url_fixtures, headers=headers) as resp:
@@ -76,7 +77,7 @@ async def buscar_fixture_id(nome_jogo: str) -> int | None:
                 logger.info(f"API retornou {len(jogos)} jogos para o dia. Comparando nomes...")
 
                 melhor_match = None
-                maior_similaridade = 0.75
+                maior_similaridade = 0.75 # Limite mínimo de similaridade
 
                 for item in jogos:
                     teams = item.get("teams", {})
@@ -108,29 +109,34 @@ async def buscar_fixture_id(nome_jogo: str) -> int | None:
 # --- Funções do Bot 1 (Análise Climática) ---
 
 def analisar_clima(texto):
-    """Analisa condições climáticas com regex mais robusto para emojis."""
     pontos_clima = 0
     criterios_clima = []
     logger.info("🌤️ Iniciando análise climática...")
     try:
         temp_match = re.search(r"🌡️\s*([\d.]+)\s*°C", texto)
-        # Regex agora aceita ambas as variações do emoji de nuvem (☁️ ou ☁)
-        nuvens_match = re.search(r"(☁️|☁)\s*([\d.]+)%", texto)
+        nuvens_match = re.search(r"☁\s*([\d.]+)%", texto)
         umidade_match = re.search(r"💧\s*([\d.]+)%", texto)
         vento_match = re.search(r"💨\s*([\d.]+)\s*m/s", texto)
-
         temperatura = float(temp_match.group(1)) if temp_match else None
-        nebulosidade = float(nuvens_match.group(2)) if nuvens_match else None # Grupo 2 para nuvens
+        nebulosidade = float(nuvens_match.group(1)) if nuvens_match else None
         umidade = float(umidade_match.group(1)) if umidade_match else None
         vento = float(vento_match.group(1)) if vento_match else None
-        
         log_clima = []
         if temperatura is not None:
             if 18 <= temperatura <= 28: pontos_clima += 1; criterios_clima.append("Temperatura ideal")
             log_clima.append(f"Temperatura: {temperatura}°C → {'✅' if 18 <= temperatura <= 28 else '❌'}")
+        
+        # --- LÓGICA DA NEBULOSIDADE ATUALIZADA ---
         if nebulosidade is not None:
-            if nebulosidade <= 20: pontos_clima += 1; criterios_clima.append("Nebulosidade ideal")
+            # A condição agora é 'maior ou igual a 20', sem limite máximo.
+            # Isso pontua positivamente qualquer condição que não seja sol forte.
+            if nebulosidade >= 20: 
+                pontos_clima += 1
+                criterios_clima.append("Nebulosidade ideal (sem sol forte)")
+            
+            # A lógica do emoji no log também é atualizada.
             log_clima.append(f"Nebulosidade: {nebulosidade}% → {'✅' if nebulosidade >= 20 else '❌'}")
+        
         if umidade is not None:
             if 50 <= umidade <= 75: pontos_clima += 1; criterios_clima.append("Umidade ideal")
             log_clima.append(f"Umidade: {umidade}% → {'✅' if 50 <= umidade <= 75 else '❌'}")
@@ -139,7 +145,6 @@ def analisar_clima(texto):
             elif 7 < vento <= 10: pontos_clima += 0.5; criterios_clima.append("Vento moderado")
             log_clima.append(f"Vento: {vento} m/s → {'✅' if vento <= 7 else '⚠️' if vento <= 10 else '❌'}")
         logger.info(f"🌤️ Detalhes Climáticos Extraídos: {' | '.join(log_clima)}")
-        
     except Exception as e:
         logger.error(f"Erro na análise climática: {e}")
 
@@ -150,7 +155,6 @@ def analisar_clima(texto):
     return pontos_clima, criterios_clima, status_clima
 
 async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
-    # (Mantendo a versão de depuração detalhada)
     odd_ht = "N/D"
     fixture_id = await buscar_fixture_id(nome_jogo)
     if not fixture_id:
@@ -245,57 +249,31 @@ async def tarefa_veredito_por_id(fixture_id, msg_original):
             except Exception as edit_error:
                 logger.error(f"❌ Falha ao editar mensagem para fixture {fixture_id}: {edit_error}")
 
-# ATUALIZAÇÃO AQUI
 async def analisar(texto):
-    """
-    Função de análise principal ATUALIZADA para o novo formato de sinal "bloco de texto",
-    com extração de dados robusta e economia de API.
-    """
     logger.info("📊 Iniciando análise do sinal 'Over 0.5 HT'")
     try:
-        # --- PASSO 1: Extrair o nome do jogo e aplicar filtros iniciais ---
         jogo_match = re.search(r'⚽️\s*(.+)', texto)
         jogo = jogo_match.group(1).strip() if jogo_match else "Times não identificados"
-        
         if "U20" in jogo.upper():
             logger.info(f"🚫 Sinal para jogo U20 ('{jogo}') ignorado conforme regra.")
             return
-        
-        logger.info(f"📌 Jogo detectado: {jogo}")
-
-        # --- PASSO 2: Extração de dados robusta para o novo formato ---
-        minuto = ia_valor1 = ia_valor2 = ataques1 = ataques2 = perigosos1 = perigosos2 = posse1 = posse2 = escanteios1 = escanteios2 = chutes1 = chutes2 = nogol1 = nogol2 = foragol1 = foragol2 = None
-
-        minuto_match = re.search(r"⏰\s*(\d+)", texto)
-        if minuto_match:
-            minuto = int(minuto_match.group(1))
-
-        ia_match = re.search(r"OVER 0\.5 HT:\s*([\d.]+)%\s*/\s*([\d.]+)%", texto)
-        if ia_match:
-            ia_valor1, ia_valor2 = map(float, ia_match.groups())
-        else: # Fallback para o formato antigo
-            ia_match_antigo = re.search(r"OVER 0\.5 HT:\s*([\d.]+)%", texto)
-            if ia_match_antigo:
-                ia_valor1 = float(ia_match_antigo.group(1))
-
-        eventos_match = re.search(r"Ataques:\s*(\d+)/(\d+)\s*Ataques Perigosos:\s*(\d+)/(\d+)\s*Posse de Bola:\s*(\d+)%\s*/\s*(\d+)%\s*Escanteios:\s*(\d+)/(\d+)", texto, re.DOTALL)
-        if eventos_match:
-            ataques1, ataques2, perigosos1, perigosos2, posse1, posse2, escanteios1, escanteios2 = map(int, eventos_match.groups())
-
-        chutes_match = re.search(r"Total:\s*(\d+)/(\d+)\s*No Gol:\s*(\d+)/(\d+)\s*Fora do Gol:\s*(\d+)/(\d+)", texto, re.DOTALL)
-        if chutes_match:
-            chutes1, chutes2, nogol1, nogol2, foragol1, foragol2 = map(int, chutes_match.groups())
             
-        ia = max(ia_valor1 or 0, ia_valor2 or 0)
-        perigosos = [perigosos1 or 0, perigosos2 or 0]
-        posse = [posse1 or 0, posse2 or 0]
-        escanteios = [escanteios1 or 0, escanteios2 or 0]
-        no_gol = [nogol1 or 0, nogol2 or 0]
-        chutes = [chutes1 or 0, chutes2 or 0]
-
-        # --- PASSO 3: Lógica de Pontuação ---
+        logger.info(f"📌 Jogo detectado: {jogo}")
+        minuto_match = re.search(r"⏰\s*(\d+)", texto)
+        minuto = int(minuto_match.group(1)) if minuto_match else None
+        ia_match = re.search(r"OVER 0\.5 HT:\s*([\d.]+)%", texto)
+        ia = float(ia_match.group(1)) if ia_match else None
+        match_perigosos = re.findall(r"Ataques Perigosos:\s*(\d+)/(\d+)", texto)
+        perigosos = list(map(int, match_perigosos[0])) if match_perigosos else [0, 0]
+        match_posse = re.findall(r"Posse de Bola:\s*(\d+)/(\d+)", texto)
+        posse = list(map(int, match_posse[0])) if match_posse else [0, 0]
+        match_escanteios = re.findall(r"Escanteios:\s*(\d+)/(\d+)", texto)
+        escanteios = list(map(int, match_escanteios[0])) if match_escanteios else [0, 0]
+        match_no_gol = re.findall(r"No Gol:\s*(\d+)/(\d+)", texto)
+        no_gol = list(map(int, match_no_gol[0])) if match_no_gol else [0, 0]
+        match_chutes = re.findall(r"Total:\s*(\d+)/(\d+)", texto)
+        chutes = list(map(int, match_chutes[0])) if match_chutes else [0, 0]
         pontos_clima, criterios_clima, status_clima = analisar_clima(texto)
-        
         criterios_tecnicos = []
         pontos_tecnicos = 0
         if ia and ia >= 70: criterios_tecnicos.append("IA favorável"); pontos_tecnicos += 2
@@ -305,27 +283,24 @@ async def analisar(texto):
         if sum(escanteios) >= 2: criterios_tecnicos.append("Escanteios"); pontos_tecnicos += 1
         if sum(chutes) >= 4: criterios_tecnicos.append("Chutes suficientes"); pontos_tecnicos += 1
         if posse[0] >= 60 or posse[1] >= 60: criterios_tecnicos.append("Posse dominante"); pontos_tecnicos += 1
-        
         pontos_total = pontos_tecnicos + pontos_clima
+        max_pontos_total = 14
         limite_minimo = 9.0
-        deve_entrar = pontos_total >= limite_minimo
-
-        logger.info(f"📈 Pontos Técnicos: {pontos_tecnicos}/10 | 🌤️ Pontos Clima: {pontos_clima}/4 | 🎯 Total: {pontos_total}")
-
-        # --- PASSO 4: Se a pontuação for boa, SÓ ENTÃO busca a odd ---
+        condicao1 = pontos_total >= limite_minimo
+        condicao2 = pontos_tecnicos >= 7 and pontos_clima >= 2
+        condicao3 = pontos_tecnicos >= 8 and pontos_clima >= 1.5
+        deve_entrar = condicao1 or condicao2 or condicao3
+        logger.info(f"📈 Pontuação Técnica: {pontos_tecnicos}/10 | 🌤️ Pontuação Climática: {pontos_clima}/4 | 🎯 Pontuação Total: {pontos_total}/{max_pontos_total}")
         if deve_entrar:
             logger.info(f"✅ Pontuação suficiente para '{jogo}'. Buscando odd e fixture ID...")
             odd_ht, fixture_id = await buscar_odd_ht(jogo)
-            
             if pontos_total >= 12: confianca = "MUITO ALTA 🔥 STAKE 1%"
             elif pontos_total >= 10: confianca = "ALTA ✅ STAKE 0.75%"
             elif pontos_clima >= 3: confianca = "MÉDIA-ALTA ⚡ STAKE 0.5%"
             else: confianca = "MÉDIA ⚠️ STAKE 0.25%"
-            
             veredito = f"ENTRAR | CONFIANÇA: {confianca}"
             resumo_clima = f" {status_clima} ({pontos_clima}/4pts)"
             resumo_tecnico = f" {pontos_tecnicos}/10pts"
-            
             msg = f"""⚽️ {veredito}
 🏟️ {jogo}
 🤖 OVERBOT ANÁLISE:
@@ -333,7 +308,6 @@ async def analisar(texto):
 🌤️ CLIMA: {resumo_clima}
 📊 ODD ATUAL: *{odd_ht}*
 ▶️ ENTRADA: OVER 0.5 HT"""
-            
             msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg, parse_mode='Markdown')
             logger.info(f"✅ Sinal 'Over 0.5 HT' enviado para: {jogo}")
             if fixture_id:
@@ -342,17 +316,15 @@ async def analisar(texto):
                 logger.warning(f"Veredito não agendado para '{jogo}' pois o fixture ID não pôde ser encontrado pela API.")
         else:
             logger.info(f"❌ Critérios insuficientes para '{jogo}'. Sinal ignorado sem uso de API.")
-            
     except Exception as e:
         logger.error(f"Erro na análise principal: {e}")
-        logger.error(traceback.format_exc())
 
 # --- Funções do Bot 2 ((CT) Over Gol) ---
 async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
     resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"
     try:
         logger.info(f"⏰ [CT Over {goal_line}] Aguardando 45 min para veredito do fixture ID: {fixture_id}")
-        await asyncio.sleep(2700)
+        await asyncio.sleep(3600)
         headers = {"x-apisports-key": FOOTBALL_API_KEY}
         url = f"https://v3.football.api-sports.io/fixtures?id={fixture_id}"
         async with aiohttp.ClientSession() as session:
