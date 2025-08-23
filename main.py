@@ -93,7 +93,6 @@ async def buscar_fixture_id(nome_jogo: str) -> int | None:
 
 # --- Funções do Bot 1 (Análise Climática) ---
 def analisar_clima(texto):
-    # (Seu código original completo aqui, sem alterações)
     pontos_clima = 0
     criterios_clima = []
     logger.info("🌤️ Iniciando análise climática...")
@@ -110,9 +109,17 @@ def analisar_clima(texto):
         if temperatura is not None:
             if 18 <= temperatura <= 28: pontos_clima += 1; criterios_clima.append("Temperatura ideal")
             log_clima.append(f"Temperatura: {temperatura}°C → {'✅' if 18 <= temperatura <= 28 else '❌'}")
+        
+        # --- LÓGICA DA NEBULOSIDADE CORRIGIDA ---
         if nebulosidade is not None:
-            if 20 <= nebulosidade <= 70: pontos_clima += 1; criterios_clima.append("Nebulosidade ideal")
-            log_clima.append(f"Nebulosidade: {nebulosidade}% → {'✅' if 20 <= nebulosidade <= 70 else '❌'}")
+            # A condição agora é 'maior ou igual a 20', sem limite máximo.
+            if nebulosidade >= 20: 
+                pontos_clima += 1
+                criterios_clima.append("Nebulosidade ideal (sem sol forte)")
+            
+            # A lógica do emoji no log também foi atualizada para refletir a nova regra.
+            log_clima.append(f"Nebulosidade: {nebulosidade}% → {'✅' if nebulosidade >= 20 else '❌'}")
+        
         if umidade is not None:
             if 50 <= umidade <= 75: pontos_clima += 1; criterios_clima.append("Umidade ideal")
             log_clima.append(f"Umidade: {umidade}% → {'✅' if 50 <= umidade <= 75 else '❌'}")
@@ -123,12 +130,13 @@ def analisar_clima(texto):
         logger.info(f"🌤️ Detalhes Climáticos Extraídos: {' | '.join(log_clima)}")
     except Exception as e:
         logger.error(f"Erro na análise climática: {e}")
+
     if pontos_clima >= 3.5: status_clima = "🟢 FAVORÁVEL"
     elif pontos_clima >= 2: status_clima = "🟡 NEUTRO"
     else: status_clima = "🔴 DESFAVORÁVEL"
     logger.info(f"🌤️ Pontuação Climática Final: {pontos_clima}/4 - {status_clima}")
     return pontos_clima, criterios_clima, status_clima
-
+    
 async def buscar_odd_ht(nome_jogo: str) -> (str, int | None):
     # (Seu código original completo aqui, sem alterações)
     odd_ht = "N/D"
