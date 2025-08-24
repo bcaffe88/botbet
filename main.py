@@ -260,17 +260,17 @@ async def analisar(texto):
         if posse[0] >= 60 or posse[1] >= 60: criterios_tecnicos.append("Posse dominante"); pontos_tecnicos += 1
         pontos_total = pontos_tecnicos + pontos_clima
         max_pontos_total = 14
-        limite_minimo = 9.0
+        limite_minimo = 8.0
         condicao1 = pontos_total >= limite_minimo
-        condicao2 = pontos_tecnicos >= 7 and pontos_clima >= 2
-        condicao3 = pontos_tecnicos >= 8 and pontos_clima >= 1.5
+        condicao2 = pontos_tecnicos >= 6 and pontos_clima >= 2
+        condicao3 = pontos_tecnicos >= 7 and pontos_clima >= 1.5
         deve_entrar = condicao1 or condicao2 or condicao3
         logger.info(f"📈 Pontuação Técnica: {pontos_tecnicos}/10 | 🌤️ Pontuação Climática: {pontos_clima}/4 | 🎯 Pontuação Total: {pontos_total}/{max_pontos_total}")
         if deve_entrar:
             logger.info(f"✅ Pontuação suficiente para '{jogo}'. Buscando odd e fixture ID...")
             odd_ht, fixture_id = await buscar_odd_ht(jogo)
-            if pontos_total >= 12: confianca = "MUITO ALTA 🔥 STAKE 1%"
-            elif pontos_total >= 10: confianca = "ALTA ✅ STAKE 0.75%"
+            if pontos_total >= 11: confianca = "MUITO ALTA 🔥 STAKE 1%"
+            elif pontos_total >= 9: confianca = "ALTA ✅ STAKE 0.75%"
             elif pontos_clima >= 3: confianca = "MÉDIA-ALTA ⚡ STAKE 0.5%"
             else: confianca = "MÉDIA ⚠️ STAKE 0.25%"
             veredito = f"ENTRAR | CONFIANÇA: {confianca}"
