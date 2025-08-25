@@ -188,7 +188,8 @@ async def tarefa_veredito_por_id(fixture_id, msg_original):
             except Exception as edit_error: logger.error(f"❌ Falha ao editar mensagem para fixture {fixture_id}: {edit_error}")
 
 async def analisar(texto):
-    logger.info("📊 Iniciando análise do sinal 'Over 0.5 HT'"); try:
+    logger.info("📊 Iniciando análise do sinal 'Over 0.5 HT'"); 
+    try:
         jogo_match = re.search(r'⚽️\s*(.+)', texto); jogo = jogo_match.group(1).strip() if jogo_match else "Times não identificados"
         if "U20" in jogo.upper(): logger.info(f"🚫 Sinal para jogo U20 ('{jogo}') ignorado."); return
         
