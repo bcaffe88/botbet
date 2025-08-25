@@ -233,7 +233,9 @@ async def tarefa_veredito_por_id(fixture_id, msg_original):
                 logger.error(f"❌ Falha ao editar mensagem para fixture {fixture_id}: {edit_error}")
 
 async def analisar(texto):
-    # (Sua função original aqui, sem alterações)
+    """
+    Função de análise principal com lógica de extração e pontuação CORRIGIDA e MAIS ROBUSTA.
+    """
     logger.info("📊 Iniciando análise do sinal 'Over 0.5 HT'")
     try:
         jogo_match = re.search(r'⚽️\s*(.+)', texto)
@@ -241,40 +243,68 @@ async def analisar(texto):
         if "U20" in jogo.upper():
             logger.info(f"🚫 Sinal para jogo U20 ('{jogo}') ignorado conforme regra.")
             return
+            
         logger.info(f"📌 Jogo detectado: {jogo}")
         minuto_match = re.search(r"⏰\s*(\d+)", texto)
         minuto = int(minuto_match.group(1)) if minuto_match else None
-        ia_match = re.search(r"OVER 0\.5 HT:\s*([\d.]+)%", texto)
-        ia = float(ia_match.group(1)) if ia_match else None
+        
+        # Lógica de IA (mantida)
+        ia_match = re.search(r"OVER 0\.5 HT:\s*([\d.]+)%\s*/\s*([\d.]+)%", texto)
+        ia = None
+        if ia_match:
+            ia = max(map(float, ia_match.groups()))
+        else:
+            ia_match_antigo = re.search(r"OVER 0\.5 HT:\s*([\d.]+)%", texto)
+            if ia_match_antigo: ia = float(ia_match_antigo.group(1))
+        
+        # Extração de estatísticas
         match_perigosos = re.findall(r"Ataques Perigosos:\s*(\d+)/(\d+)", texto)
         perigosos = list(map(int, match_perigosos[0])) if match_perigosos else [0, 0]
-        match_posse = re.findall(r"Posse de Bola:\s*(\d+)/(\d+)", texto)
+        
+        match_posse = re.findall(r"Posse de Bola:\s*(\d+)%\s*/\s*(\d+)%", texto)
         posse = list(map(int, match_posse[0])) if match_posse else [0, 0]
+        
         match_escanteios = re.findall(r"Escanteios:\s*(\d+)/(\d+)", texto)
         escanteios = list(map(int, match_escanteios[0])) if match_escanteios else [0, 0]
+        
         match_no_gol = re.findall(r"No Gol:\s*(\d+)/(\d+)", texto)
         no_gol = list(map(int, match_no_gol[0])) if match_no_gol else [0, 0]
-        match_chutes = re.findall(r"Total:\s*(\d+)/(\d+)", texto)
-        chutes = list(map(int, match_chutes[0])) if match_chutes else [0, 0]
+        
+        match_fora_gol = re.findall(r"Fora do Gol:\s*(\d+)/(\d+)", texto)
+        fora_gol = list(map(int, match_fora_gol[0])) if match_fora_gol else [0, 0]
+
+        # --- CORREÇÃO 1: Cálculo robusto dos chutes totais ---
+        # Em vez de procurar "Total:", somamos os chutes no gol e fora do gol.
+        chutes = [no_gol[0] + fora_gol[0], no_gol[1] + fora_gol[1]]
+        
         pontos_clima, criterios_clima, status_clima = analisar_clima(texto)
+        
         criterios_tecnicos = []
         pontos_tecnicos = 0
         if ia and ia >= 70: criterios_tecnicos.append("IA favorável"); pontos_tecnicos += 2
         if minuto and 16 <= minuto <= 22: criterios_tecnicos.append("Minuto ideal"); pontos_tecnicos += 1
-        if sum(perigosos) >= 10 and abs(perigosos[0] - perigosos[1]) >= 7: criterios_tecnicos.append("Ataques perigosos"); pontos_tecnicos += 2
+        
+        # --- CORREÇÃO 2: Regra de Ataques Perigosos mais flexível ---
+        # Agora pontua se a SOMA for alta OU se houver um DOMÍNIO claro.
+        soma_perigosos = sum(perigosos)
+        diff_perigosos = abs(perigosos[0] - perigosos[1])
+        if soma_perigosos >= 15 or (soma_perigosos >= 10 and diff_perigosos >= 5):
+            criterios_tecnicos.append("Ataques perigosos")
+            pontos_tecnicos += 2
+
         if sum(no_gol) >= 1: criterios_tecnicos.append("Finalizações no gol"); pontos_tecnicos += 2
         if sum(escanteios) >= 2: criterios_tecnicos.append("Escanteios"); pontos_tecnicos += 1
         if sum(chutes) >= 4: criterios_tecnicos.append("Chutes suficientes"); pontos_tecnicos += 1
         if posse[0] >= 60 or posse[1] >= 60: criterios_tecnicos.append("Posse dominante"); pontos_tecnicos += 1
+        
         pontos_total = pontos_tecnicos + pontos_clima
-        max_pontos_total = 14
         limite_minimo = 9.0
-        condicao1 = pontos_total >= limite_minimo
-        condicao2 = pontos_tecnicos >= 7 and pontos_clima >= 2
-        condicao3 = pontos_tecnicos >= 8 and pontos_clima >= 1.5
-        deve_entrar = condicao1 or condicao2 or condicao3
-        logger.info(f"📈 Pontuação Técnica: {pontos_tecnicos}/10 | 🌤️ Pontuação Climática: {pontos_clima}/4 | 🎯 Pontuação Total: {pontos_total}/{max_pontos_total}")
+        deve_entrar = pontos_total >= limite_minimo
+
+        logger.info(f"📈 Pontuação Técnica: {pontos_tecnicos}/10 | 🌤️ Pontuação Climática: {pontos_clima}/4 | 🎯 Pontuação Total: {pontos_total}")
+
         if deve_entrar:
+            # (O resto da sua função de envio e agendamento de veredito continua aqui, sem alterações)
             logger.info(f"✅ Pontuação suficiente para '{jogo}'. Buscando odd e fixture ID...")
             odd_ht, fixture_id = await buscar_odd_ht(jogo)
             if pontos_total >= 12: confianca = "MUITO ALTA 🔥 STAKE 1%"
