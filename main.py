@@ -265,8 +265,8 @@ async def analisar(texto):
             odd_ht = await buscar_odd_ao_vivo(fixture_id, goal_line_alvo)
 
             if gols_ht_atuais is not None and gols_ht_atuais > 0:
-                veredito = f"ENTRADA LIMITE | CONFIANÇA: {confianca}"
-                aviso_teste = "\n\n⚠️ *Estratégia 'Over Limite' em teste. Faça sua própria análise (DYOR).*"
+                veredito = f"ENTRADA HT LIMITE | CONFIANÇA: {confianca}"
+                aviso_teste = "\n\n⚠️ *Estratégia 'Over Limite HT' em teste. Faça sua própria análise (DYOR).*"
             else:
                 veredito = f"ENTRAR | CONFIANÇA: {confianca}"
                 aviso_teste = ""
@@ -285,8 +285,8 @@ async def analisar(texto):
 async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
     resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"
     try:
-        logger.info(f"⏰ [CT Over {goal_line}] Aguardando 45 min para veredito do fixture ID: {fixture_id}")
-        await asyncio.sleep(2700)
+        logger.info(f"⏰ [CT Over {goal_line}] Aguardando 1h para veredito do fixture ID: {fixture_id}")
+        await asyncio.sleep(3600)
         headers = {"x-apisports-key": FOOTBALL_API_KEY}
         url = f"https://v3.football.api-sports.io/fixtures?id={fixture_id}"
         async with aiohttp.ClientSession() as session:
