@@ -47,15 +47,9 @@ def similaridade(a, b):
     if not a or not b: return 0.0
     return SequenceMatcher(None, normalizar(a), normalizar(b)).ratio()
 
-# --- FUNÇÃO DE BUSCA DE FIXTURE CORRIGIDA ---
 async def buscar_fixture_id(nome_jogo: str) -> int | None:
-    """
-    Busca o fixture ID usando a lógica original: baixa todos os jogos do dia
-    e encontra o melhor resultado por similaridade de nome.
-    """
     if not nome_jogo or not FOOTBALL_API_KEY:
         return None
-
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
     data_hoje = datetime.now().strftime("%Y-%m-%d")
     url_fixtures = f"https://v3.football.api-sports.io/fixtures?date={data_hoje}"
@@ -324,11 +318,11 @@ async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
             except Exception as edit_error:
                 logger.error(f"❌ Falha ao editar mensagem (CT): {edit_error}")
 
-async def verificar_resultado_final_htft(fixture_id, msg_original):
+async def verificar_resultado_final_htft(fixture_id, msg_original, goal_line):
     resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"
     try:
-        logger.info(f"⏰ [HT/FT] Aguardando 35 min para veredito do fixture ID: {fixture_id}")
-        await asyncio.sleep(2100) # Checa no intervalo
+        logger.info(f"⏰ [HT/FT] Aguardando 1h para veredito do fixture ID: {fixture_id}")
+        await asyncio.sleep(3600)
         
         headers = {"x-apisports-key": FOOTBALL_API_KEY}
         url = f"https://v3.football.api-sports.io/fixtures?id={fixture_id}"
@@ -339,33 +333,15 @@ async def verificar_resultado_final_htft(fixture_id, msg_original):
                     data = await resp.json()
                     if data.get('results', 0) > 0:
                         fixture = data['response'][0]
-                        gols_casa_ht = fixture.get('score', {}).get('halftime', {}).get('home', 0)
-                        gols_fora_ht = fixture.get('score', {}).get('halftime', {}).get('away', 0)
-                        gols_ht = gols_casa_ht + gols_fora_ht
+                        gols_casa_ft = fixture.get('score', {}).get('fulltime', {}).get('home', 0)
+                        gols_fora_ft = fixture.get('score', {}).get('fulltime', {}).get('away', 0)
+                        gols_ft = gols_casa_ft + gols_fora_ft
                         
-                        if gols_ht >= 1:
+                        if gols_ft > goal_line:
                             resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅"
                         else:
-                            # Se não bateu no HT, aguarda o FT
-                            logger.info(f"⏰ [HT/FT] Veredito HT negativo. Aguardando FT para o fixture ID: {fixture_id}")
-                            await asyncio.sleep(2400) # Aguarda mais 40 min para o FT
-                            
-                            async with session.get(url, headers=headers) as resp_ft:
-                                if resp_ft.status == 200:
-                                    data_ft = await resp_ft.json()
-                                    if data_ft.get('results', 0) > 0:
-                                        fixture_ft = data_ft['response'][0]
-                                        gols_casa_ft = fixture_ft.get('score', {}).get('fulltime', {}).get('home', 0)
-                                        gols_fora_ft = fixture_ft.get('score', {}).get('fulltime', {}).get('away', 0)
-                                        gols_ft = gols_casa_ft + gols_fora_ft
-                                        
-                                        if gols_ft > 1: # Assumindo Over 1.5 para o FT
-                                            resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅"
-                                        else:
-                                            resultado_final = "R E D ❌"
-                                    else: logger.warning(f"⚠️ [HT/FT] API não retornou dados FT para fixture {fixture_id}.")
-                                else: logger.error(f"❌ [HT/FT] Erro na API ao buscar veredito FT: Status {resp_ft.status}")
-                    else: logger.warning(f"⚠️ [HT/FT] API não retornou dados para fixture {fixture_id} na verificação.")
+                            resultado_final = "R E D ❌"
+                    else: logger.warning(f"⚠️ [HT/FT] API não retornou dados para fixture {fixture_id}.")
                 else: resultado_final = "⏳ ERRO NA API"
     except asyncio.CancelledError:
         logger.info(f"Tarefa de veredito (HT/FT) para fixture {fixture_id} foi cancelada.")
@@ -400,7 +376,13 @@ async def processar_sinal_ct(texto_original):
                 goal_line = float(goal_line_match.group(1))
     elif "Estratégia: Over HT/FT" in texto_original:
         tipo_sinal_detectado = "Over HT/FT"
-    
+        selecao_match = re.search(r"Seleção:\s*(.+)", texto_original)
+        if selecao_match:
+            selecao_texto = selecao_match.group(1).strip().split('|')[0].strip()
+            goal_line_match = re.search(r"([\d.]+)", selecao_texto)
+            if goal_line_match:
+                goal_line = float(goal_line_match.group(1))
+
     if tipo_sinal_detectado == "N/A":
         logger.warning("Sinal de encaminhamento não reconhecido. Abortando.")
         return
@@ -439,7 +421,7 @@ async def processar_sinal_ct(texto_original):
             if tipo_sinal_detectado == "(CT) Over Gol":
                 asyncio.create_task(verificar_resultado_final_ct(fixture_id, msg_enviada, goal_line))
             elif tipo_sinal_detectado == "Over HT/FT":
-                asyncio.create_task(verificar_resultado_final_htft(fixture_id, msg_enviada))
+                asyncio.create_task(verificar_resultado_final_htft(fixture_id, msg_enviada, goal_line))
         else:
             logger.warning(f"Veredito não agendado para '{evento}' ({tipo_sinal_detectado}) pois o fixture ID não foi encontrado.")
             
