@@ -288,6 +288,99 @@ async def analisar(texto):
         logger.error(f"Erro na análise principal: {e}"); logger.error(traceback.format_exc())
 
 # --- Funções do Bot 2 ((CT) Over Gol e HT/FT) ---
+async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
+    resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"
+    try:
+        logger.info(f"⏰ [CT Over {goal_line}] Aguardando 45 min para veredito do fixture ID: {fixture_id}")
+        await asyncio.sleep(2700)
+        headers = {"x-apisports-key": FOOTBALL_API_KEY}
+        url = f"https://v3.football.api-sports.io/fixtures?id={fixture_id}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get('results', 0) > 0:
+                        fixture = data['response'][0]
+                        gols_casa = fixture.get('score', {}).get('fulltime', {}).get('home')
+                        gols_fora = fixture.get('score', {}).get('fulltime', {}).get('away')
+                        if gols_casa is not None and gols_fora is not None:
+                            total_gols = gols_casa + gols_fora
+                            resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅" if total_gols > goal_line else "R E D ❌"
+                        else: logger.warning(f"⚠️ [CT Over {goal_line}] Dados de gols FT indisponíveis.")
+                    else: logger.warning(f"⚠️ [CT Over {goal_line}] API não retornou dados para fixture.")
+                else:
+                    resultado_final = "⏳ ERRO NA API"
+    except asyncio.CancelledError:
+        logger.info(f"Tarefa de veredito (CT) para fixture {fixture_id} foi cancelada.")
+        raise
+    except Exception as e:
+        logger.error(f"❌ [CT Over {goal_line}] Erro na tarefa de veredito: {e}")
+        resultado_final = "⏳ ERRO AO VERIFICAR"
+    finally:
+        if not asyncio.current_task().cancelled():
+            novo_texto = f"{msg_original.text}\n\n───────────────\n{resultado_final}"
+            try:
+                await bot.edit_message_text(chat_id=CHAT_ID_DESTINO, message_id=msg_original.message_id, text=novo_texto)
+            except Exception as edit_error:
+                logger.error(f"❌ Falha ao editar mensagem (CT): {edit_error}")
+
+async def verificar_resultado_final_htft(fixture_id, msg_original):
+    resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"
+    try:
+        logger.info(f"⏰ [HT/FT] Aguardando 35 min para veredito do fixture ID: {fixture_id}")
+        await asyncio.sleep(2100) # Checa no intervalo
+        
+        headers = {"x-apisports-key": FOOTBALL_API_KEY}
+        url = f"https://v3.football.api-sports.io/fixtures?id={fixture_id}"
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get('results', 0) > 0:
+                        fixture = data['response'][0]
+                        gols_casa_ht = fixture.get('score', {}).get('halftime', {}).get('home', 0)
+                        gols_fora_ht = fixture.get('score', {}).get('halftime', {}).get('away', 0)
+                        gols_ht = gols_casa_ht + gols_fora_ht
+                        
+                        if gols_ht >= 1:
+                            resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅"
+                        else:
+                            # Se não bateu no HT, aguarda o FT
+                            logger.info(f"⏰ [HT/FT] Veredito HT negativo. Aguardando FT para o fixture ID: {fixture_id}")
+                            await asyncio.sleep(2400) # Aguarda mais 40 min para o FT
+                            
+                            async with session.get(url, headers=headers) as resp_ft:
+                                if resp_ft.status == 200:
+                                    data_ft = await resp_ft.json()
+                                    if data_ft.get('results', 0) > 0:
+                                        fixture_ft = data_ft['response'][0]
+                                        gols_casa_ft = fixture_ft.get('score', {}).get('fulltime', {}).get('home', 0)
+                                        gols_fora_ft = fixture_ft.get('score', {}).get('fulltime', {}).get('away', 0)
+                                        gols_ft = gols_casa_ft + gols_fora_ft
+                                        
+                                        if gols_ft > 1: # Assumindo Over 1.5 para o FT
+                                            resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅"
+                                        else:
+                                            resultado_final = "R E D ❌"
+                                    else: logger.warning(f"⚠️ [HT/FT] API não retornou dados FT para fixture {fixture_id}.")
+                                else: logger.error(f"❌ [HT/FT] Erro na API ao buscar veredito FT: Status {resp_ft.status}")
+                    else: logger.warning(f"⚠️ [HT/FT] API não retornou dados para fixture {fixture_id} na verificação.")
+                else: resultado_final = "⏳ ERRO NA API"
+    except asyncio.CancelledError:
+        logger.info(f"Tarefa de veredito (HT/FT) para fixture {fixture_id} foi cancelada.")
+        raise
+    except Exception as e:
+        logger.error(f"❌ [HT/FT] Erro crítico na tarefa de veredito: {e}")
+        resultado_final = "⏳ ERRO AO VERIFICAR"
+    finally:
+        if not asyncio.current_task().cancelled():
+            novo_texto = f"{msg_original.text}\n\n───────────────\n{resultado_final}"
+            try:
+                await bot.edit_message_text(chat_id=CHAT_ID_DESTINO, message_id=msg_original.message_id, text=novo_texto)
+            except Exception as edit_error:
+                logger.error(f"❌ Falha ao editar mensagem (HT/FT): {edit_error}")
+
 async def processar_sinal_ct(texto_original):
     ID_PARA_IGNORAR = "1221386"
     if ID_PARA_IGNORAR in texto_original:
@@ -296,8 +389,15 @@ async def processar_sinal_ct(texto_original):
     
     # Detecção do tipo de sinal
     tipo_sinal_detectado = "N/A"
+    goal_line = None
     if "Estratégia: (CT) Over Gol" in texto_original:
         tipo_sinal_detectado = "(CT) Over Gol"
+        selecao_match = re.search(r"Seleção:\s*(.+)", texto_original)
+        if selecao_match:
+            selecao_texto = selecao_match.group(1).strip().split('|')[0].strip()
+            goal_line_match = re.search(r"([\d.]+)", selecao_texto)
+            if goal_line_match:
+                goal_line = float(goal_line_match.group(1))
     elif "Estratégia: Over HT/FT" in texto_original:
         tipo_sinal_detectado = "Over HT/FT"
     
@@ -318,7 +418,6 @@ async def processar_sinal_ct(texto_original):
             logger.info(f"🚫 Sinal ({tipo_sinal_detectado}) para jogo U20 ('{evento}') ignorado.")
             return
 
-        # Extração de dados para formatação, sem erro para sinais HT/FT
         competicao_match = re.search(r"Competição:\s*(.+)", texto_original)
         mercado_match = re.search(r"Mercado:\s*(.+)", texto_original)
         selecao_match = re.search(r"Seleção:\s*(.+)", texto_original)
@@ -329,28 +428,24 @@ async def processar_sinal_ct(texto_original):
 
         selecao_formatada = selecao_match.group(1).strip() if selecao_match else "N/A"
         mercado_texto = mercado_match.group(1).strip().split('|')[0].strip() if mercado_match else "N/A"
-
+        
         msg_formatada = f"""ANÁLISE OVERBOT VIP ({tipo_sinal_detectado})\nEvento: {evento}\nCompetição: {competicao_match.group(1).strip() if competicao_match else 'N/A'}\n\nMercado: {mercado_texto}\nSeleção: {selecao_formatada}\nStake: {stake_match.group(1).strip() if stake_match else 'N/A'}\nOdd: {odd_match.group(1).strip() if odd_match else 'N/A'}\nTipo: {tipo_match.group(1).strip() if tipo_match else 'N/A'}\n\nEstratégia: {estrategia_match.group(1).strip() if estrategia_match else 'N/A'}"""
         
         msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg_formatada)
         logger.info(f"✅ Sinal ({tipo_sinal_detectado}) enviado para o canal de destino: {evento}")
         
-        # Agendamento do Veredito (FT) para CT e HT/FT
         fixture_id = await buscar_fixture_id(evento)
         if fixture_id:
-            # Assumindo que a função verificará o resultado final para ambos os tipos de sinal
-            asyncio.create_task(verificar_resultado_final_geral(fixture_id, msg_enviada, tipo_sinal_detectado))
+            if tipo_sinal_detectado == "(CT) Over Gol":
+                asyncio.create_task(verificar_resultado_final_ct(fixture_id, msg_enviada, goal_line))
+            elif tipo_sinal_detectado == "Over HT/FT":
+                asyncio.create_task(verificar_resultado_final_htft(fixture_id, msg_enviada))
         else:
             logger.warning(f"Veredito não agendado para '{evento}' ({tipo_sinal_detectado}) pois o fixture ID não foi encontrado.")
             
     except Exception as e:
         logger.error(f"Erro ao processar sinal ({tipo_sinal_detectado}): {e}")
         logger.error(traceback.format_exc())
-
-async def verificar_resultado_final_geral(fixture_id, msg_original, tipo_sinal, goal_line):
-    # Esta função está incompleta no seu código, precisa ser implementada.
-    # A verificação final para HT/FT e CT é diferente.
-    pass
 
 # --- ROTEADOR E INICIALIZAÇÃO ---
 client = TelegramClient("sessao_sinais", API_ID, API_HASH)
@@ -370,7 +465,7 @@ async def roteador_de_sinais(event):
             await analisar(conteudo)
         elif any(estrategia in conteudo for estrategia in ESTRATEGIAS_DE_ENCAMINHAMENTO):
             matched_strategy = next((s for s in ESTRATEGIAS_DE_ENCAMINHAMENTO if s in conteudo), "N/A")
-            logger.info(f"Sinal de encaminhamento '{matched_strategy}' detectado. Roteando para processador CT.")
+            logger.info(f"Sinal de encaminhamento '{matched_strategy}' detectado. Roteando para processador de encaminhamento.")
             await processar_sinal_ct(conteudo)
     except Exception as e:
         logger.error(f"Erro no roteador de sinais: {e}")
