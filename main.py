@@ -129,15 +129,20 @@ def analisar_clima(texto):
 async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
     odd_encontrada = "N/D"
     if not fixture_id: return odd_encontrada
+    
     goal_line_str = str(goal_line).replace('.0', '')
     goal_line_str_comma = goal_line_str.replace('.', ',')
+    
     KEYWORDS_TEMPO = ['first half', '1st half', 'half time', 'ht', '1h', 'meio tempo', 'primeiro tempo', 'intervalo', '1º tempo']
     KEYWORDS_TIPO = ['over/under', 'total', 'goals', 'gols', 'line']
     OVER_PATTERNS = [f'over {goal_line_str}', f'over {goal_line_str_comma}', f'mais {goal_line_str}', f'mais {goal_line_str_comma}', f'> {goal_line_str}', f'> {goal_line_str_comma}']
+    
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
-    url_odds = "https://v3.football.api-sports.io/odds/live"
-    params = {"fixture": str(fixture_id)}
-    logger.info(f"🔎 Buscando odd AO VIVO para Over {goal_line} HT no Fixture ID: {fixture_id}")
+    url_odds = "https://v3.football.api-sports.io/odds" # Endpoint mais confiável
+    params = {"fixture": str(fixture_id), "live": "true"} # Adicionado parâmetro live
+    
+    logger.info(f"🔎 Buscando odd AO VIVO para Over {goal_line} HT no Fixture ID: {fixture_id} via endpoint /odds")
+    
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url_odds, headers=headers, params=params) as resp_odds:
@@ -146,19 +151,32 @@ async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
                     if data_odds.get('results', 0) > 0 and data_odds.get('response'):
                         fixture_data = data_odds['response'][0]
                         bookmakers = fixture_data.get('bookmakers', [])
-                        if not bookmakers: logger.warning(f"⚠️ Nenhum bookmaker com odds ao vivo encontrado para fixture {fixture_id}"); return odd_encontrada
+                        
+                        if not bookmakers: 
+                            logger.warning(f"⚠️ Nenhum bookmaker com odds ao vivo encontrado para fixture {fixture_id}")
+                            return odd_encontrada
+                        
                         for bookmaker in bookmakers:
                             for market in bookmaker.get('bets', []):
                                 market_name = market.get('name', '').lower()
+                                
                                 if any(kw in market_name for kw in KEYWORDS_TEMPO) and any(kw in market_name for kw in KEYWORDS_TIPO):
                                     for value in market.get('values', []):
                                         value_name = value.get('value', '').lower().replace(',', '.')
                                         if any(pattern in value_name for pattern in OVER_PATTERNS):
-                                            odd_value = value.get('odd'); logger.info(f"🎉 ODD AO VIVO ENCONTRADA (Over {goal_line} HT): {odd_value}"); return str(odd_value)
+                                            odd_value = value.get('odd')
+                                            logger.info(f"🎉 ODD AO VIVO ENCONTRADA (Over {goal_line} HT): {odd_value}")
+                                            return str(odd_value)
+                        
                         logger.warning(f"⚠️ Odd 'Over {goal_line} HT' não encontrada nos mercados para fixture {fixture_id}.")
-                    else: logger.warning(f"⚠️ API /odds/live não retornou dados para fixture {fixture_id} (results: 0).")
-                else: logger.error(f"❌ Erro na API /odds/live: Status {resp_odds.status}")
-    except Exception as e: logger.error(f"❌ Erro crítico em buscar_odd_ao_vivo: {e}")
+                    else: 
+                        logger.warning(f"⚠️ API /odds não retornou dados para fixture {fixture_id} (results: 0).")
+                else: 
+                    logger.error(f"❌ Erro na API /odds: Status {resp_odds.status}")
+    except Exception as e: 
+        logger.error(f"❌ Erro crítico em buscar_odd_ao_vivo: {e}")
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        
     return odd_encontrada
 
 async def verificar_placar_ht_ao_vivo(fixture_id: int) -> int | None:
