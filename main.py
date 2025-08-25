@@ -293,28 +293,19 @@ async def processar_sinal_ct(texto_original):
     if ID_PARA_IGNORAR in texto_original:
         logger.info(f"🚫 Sinal (CT) ignorado pois contém o ID de Seleção proibido: {ID_PARA_IGNORAR}")
         return
-    logger.info("(Encaminhamento) Iniciando processamento do sinal.")
     
-    # Detecção do tipo de sinal (CT vs HT/FT)
+    # Detecção do tipo de sinal
     tipo_sinal_detectado = "N/A"
-    goal_line = None
-
     if "Estratégia: (CT) Over Gol" in texto_original:
         tipo_sinal_detectado = "(CT) Over Gol"
-        selecao_match = re.search(r"Seleção:\s*(.+)", texto_original)
-        if selecao_match:
-            selecao_texto = selecao_match.group(1).strip().split('|')[0].strip()
-            goal_line_match = re.search(r"([\d.]+)", selecao_texto)
-            if goal_line_match:
-                goal_line = float(goal_line_match.group(1))
-
     elif "Estratégia: Over HT/FT" in texto_original:
         tipo_sinal_detectado = "Over HT/FT"
-        # Para HT/FT, não precisamos de goal_line específico, o veredito checa Over 1.5
-
+    
     if tipo_sinal_detectado == "N/A":
-        logger.warning("Sinal de encaminhamento não reconhecido como CT ou HT/FT. Abortando.")
+        logger.warning("Sinal de encaminhamento não reconhecido. Abortando.")
         return
+
+    logger.info(f"(Encaminhamento) Iniciando processamento do sinal. Tipo: {tipo_sinal_detectado}")
 
     try:
         evento_match = re.search(r"Evento:\s*(.+)", texto_original)
@@ -327,11 +318,10 @@ async def processar_sinal_ct(texto_original):
             logger.info(f"🚫 Sinal ({tipo_sinal_detectado}) para jogo U20 ('{evento}') ignorado.")
             return
 
-        logger.info(f"✅ ({tipo_sinal_detectado}) Evento: '{evento}' | Linha de Gol: {goal_line}")
-        
-        # Extração de dados para formatação
+        # Extração de dados para formatação, sem erro para sinais HT/FT
         competicao_match = re.search(r"Competição:\s*(.+)", texto_original)
         mercado_match = re.search(r"Mercado:\s*(.+)", texto_original)
+        selecao_match = re.search(r"Seleção:\s*(.+)", texto_original)
         stake_match = re.search(r"Stake:\s*(.+)", texto_original)
         odd_match = re.search(r"Odd:\s*(.+)", texto_original)
         tipo_match = re.search(r"Tipo:\s*(.+)", texto_original)
@@ -339,7 +329,7 @@ async def processar_sinal_ct(texto_original):
 
         selecao_formatada = selecao_match.group(1).strip() if selecao_match else "N/A"
         mercado_texto = mercado_match.group(1).strip().split('|')[0].strip() if mercado_match else "N/A"
-        
+
         msg_formatada = f"""ANÁLISE OVERBOT VIP ({tipo_sinal_detectado})\nEvento: {evento}\nCompetição: {competicao_match.group(1).strip() if competicao_match else 'N/A'}\n\nMercado: {mercado_texto}\nSeleção: {selecao_formatada}\nStake: {stake_match.group(1).strip() if stake_match else 'N/A'}\nOdd: {odd_match.group(1).strip() if odd_match else 'N/A'}\nTipo: {tipo_match.group(1).strip() if tipo_match else 'N/A'}\n\nEstratégia: {estrategia_match.group(1).strip() if estrategia_match else 'N/A'}"""
         
         msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg_formatada)
@@ -348,12 +338,14 @@ async def processar_sinal_ct(texto_original):
         # Agendamento do Veredito (FT) para CT e HT/FT
         fixture_id = await buscar_fixture_id(evento)
         if fixture_id:
-            asyncio.create_task(verificar_resultado_final_geral(fixture_id, msg_enviada, tipo_sinal_detectado, goal_line))
+            # Assumindo que a função verificará o resultado final para ambos os tipos de sinal
+            asyncio.create_task(verificar_resultado_final_geral(fixture_id, msg_enviada, tipo_sinal_detectado))
         else:
             logger.warning(f"Veredito não agendado para '{evento}' ({tipo_sinal_detectado}) pois o fixture ID não foi encontrado.")
             
     except Exception as e:
         logger.error(f"Erro ao processar sinal ({tipo_sinal_detectado}): {e}")
+        logger.error(traceback.format_exc())
 
 async def verificar_resultado_final_geral(fixture_id, msg_original, tipo_sinal, goal_line):
     # Esta função está incompleta no seu código, precisa ser implementada.
