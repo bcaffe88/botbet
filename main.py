@@ -164,7 +164,8 @@ async def verificar_placar_ht_ao_vivo(fixture_id: int) -> int | None:
     return None
 
 async def tarefa_veredito_por_id(fixture_id, msg_original):
-    resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"; try:
+    resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"; 
+    try:
         logger.info(f"⏰ [0.5 HT] Aguardando 35 min para veredito do fixture ID: {fixture_id}"); await asyncio.sleep(2100)
         headers = {"x-apisports-key": FOOTBALL_API_KEY}; url = f"https://v3.football.api-sports.io/fixtures?id={fixture_id}"
         async with aiohttp.ClientSession() as session:
