@@ -183,28 +183,43 @@ async def verificar_placar_ht_ao_vivo(fixture_id: int) -> int | None:
     except Exception as e: logger.error(f"❌ Erro crítico ao verificar placar: {e}")
     return None
 
-async def tarefa_veredito_por_id(fixture_id, msg_original):
-    resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"; 
+# --- NOVA FUNÇÃO DE VEREDITO DINÂMICO PARA HT ---
+async def tarefa_veredito_dinamico_ht(fixture_id, msg_original, goal_line):
+    resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"
     try:
-        logger.info(f"⏰ [0.5 HT] Aguardando 35 min para veredito do fixture ID: {fixture_id}"); await asyncio.sleep(2100)
-        headers = {"x-apisports-key": FOOTBALL_API_KEY}; url = f"https://v3.football.api-sports.io/fixtures?id={fixture_id}"
+        # Aguarda 35 min para o veredito do primeiro tempo
+        logger.info(f"⏰ [Over {goal_line} HT] Aguardando 35 min para veredito do fixture ID: {fixture_id}")
+        await asyncio.sleep(2100) 
+        
+        headers = {"x-apisports-key": FOOTBALL_API_KEY}
+        url = f"https://v3.football.api-sports.io/fixtures?id={fixture_id}"
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get('results', 0) > 0:
-                        fixture = data['response'][0]; gols_casa = fixture.get('score', {}).get('halftime', {}).get('home'); gols_fora = fixture.get('score', {}).get('halftime', {}).get('away')
-                        if gols_casa is not None and gols_fora is not None: gols_ht = gols_casa + gols_fora; resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅" if gols_ht >= 1 else "R E D ❌"
-                        else: logger.warning(f"⚠️ [0.5 HT] Dados de gols no HT indisponíveis na verificação final.")
-                    else: logger.warning(f"⚠️ [0.5 HT] API não retornou dados para fixture na verificação final.")
+                        fixture = data['response'][0]
+                        gols_casa_ht = fixture.get('score', {}).get('halftime', {}).get('home')
+                        gols_fora_ht = fixture.get('score', {}).get('halftime', {}).get('away')
+                        if gols_casa_ht is not None and gols_fora_ht is not None:
+                            gols_ht = gols_casa_ht + gols_fora_ht
+                            resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅" if gols_ht > goal_line else "R E D ❌"
+                        else: logger.warning(f"⚠️ [Over {goal_line} HT] Dados de gols no HT indisponíveis na verificação final.")
+                    else: logger.warning(f"⚠️ [Over {goal_line} HT] API não retornou dados para fixture na verificação final.")
                 else: resultado_final = "⏳ ERRO NA API"
-    except asyncio.CancelledError: logger.info(f"Tarefa de veredito (0.5 HT) para fixture {fixture_id} foi cancelada."); raise
-    except Exception as e: logger.error(f"❌ [0.5 HT] Erro crítico na tarefa de veredito: {e}"); resultado_final = "⏳ ERRO AO VERIFICAR"
+    except asyncio.CancelledError:
+        logger.info(f"Tarefa de veredito (Over {goal_line} HT) para fixture {fixture_id} foi cancelada.")
+        raise
+    except Exception as e:
+        logger.error(f"❌ [Over {goal_line} HT] Erro crítico na tarefa de veredito: {e}")
+        resultado_final = "⏳ ERRO AO VERIFICAR"
     finally:
         if not asyncio.current_task().cancelled():
             novo_texto = f"{msg_original.text}\n\n───────────────\n{resultado_final}"
-            try: await bot.edit_message_text(chat_id=CHAT_ID_DESTINO, message_id=msg_original.message_id, text=novo_texto, parse_mode='Markdown')
-            except Exception as edit_error: logger.error(f"❌ Falha ao editar mensagem para fixture {fixture_id}: {edit_error}")
+            try:
+                await bot.edit_message_text(chat_id=CHAT_ID_DESTINO, message_id=msg_original.message_id, text=novo_texto, parse_mode='Markdown')
+            except Exception as edit_error:
+                logger.error(f"❌ Falha ao editar mensagem para fixture {fixture_id}: {edit_error}")
 
 async def analisar(texto):
     logger.info("📊 Iniciando análise do sinal 'Over 0.5 HT'"); 
@@ -274,12 +289,14 @@ async def analisar(texto):
             msg = f"""⚽️ {veredito}\n🏟️ {jogo}\n🤖 OVERBOT ANÁLISE:\n⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} \n🌤️ CLIMA: {resumo_clima}\n📊 ODD ATUAL: *{odd_ht}*\n▶️ ENTRADA: {mercado_alvo}{aviso_teste}"""
             msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg, parse_mode='Markdown')
             logger.info(f"✅ Sinal '{mercado_alvo}' enviado para: {jogo}")
-            asyncio.create_task(tarefa_veredito_por_id(fixture_id, msg_enviada))
+            # >>> Alteração aqui: Chamada para a nova função de veredito dinâmico
+            asyncio.create_task(tarefa_veredito_dinamico_ht(fixture_id, msg_enviada, goal_line_alvo))
 
         else:
             logger.info(f"❌ Critérios insuficientes para '{jogo}'. Sinal ignorado sem uso de API.")
     except Exception as e:
         logger.error(f"Erro na análise principal: {e}"); logger.error(traceback.format_exc())
+
 
 # --- Funções do Bot 2 ((CT) Over Gol e HT/FT) ---
 async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
