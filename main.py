@@ -47,38 +47,63 @@ def similaridade(a, b):
     if not a or not b: return 0.0
     return SequenceMatcher(None, normalizar(a), normalizar(b)).ratio()
 
+# --- FUNÇÃO DE BUSCA DE FIXTURE CORRIGIDA ---
 async def buscar_fixture_id(nome_jogo: str) -> int | None:
-    if not nome_jogo or not FOOTBALL_API_KEY: return None
+    """
+    Busca o fixture ID usando a lógica original: baixa todos os jogos do dia
+    e encontra o melhor resultado por similaridade de nome.
+    """
+    if not nome_jogo or not FOOTBALL_API_KEY:
+        return None
+
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
-    time_busca = nome_jogo.split(' x ')[0].strip()
-    datas_para_buscar = [
-        datetime.now().strftime("%Y-%m-%d"),
-        (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"),
-        (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-    ]
-    for data_busca in datas_para_buscar:
-        logger.info(f"🔎 Buscando fixture com data={data_busca} e search='{time_busca}'")
-        url_fixtures = f"https://v3.football.api-sports.io/fixtures?date={data_busca}&search={time_busca}"
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url_fixtures, headers=headers) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        if data.get("response") and data.get("results", 0) > 0:
-                            jogos = data.get("response", [])
-                            maior_similaridade = 0.75; fixture_id_encontrado = None
-                            for item in jogos:
-                                teams = item.get("teams", {}); casa = teams.get("home", {}).get("name", ""); fora = teams.get("away", {}).get("name", ""); nome_match_api = f"{casa} x {fora}"
-                                sim = similaridade(nome_jogo, nome_match_api)
-                                if sim > maior_similaridade: maior_similaridade = sim; fixture_id_encontrado = item.get("fixture", {}).get("id")
-                            if fixture_id_encontrado:
-                                logger.info(f"✅ Fixture encontrado na data {data_busca} para '{nome_jogo}': ID {fixture_id_encontrado}")
-                                return fixture_id_encontrado
-        except Exception as e:
-            logger.error(f"Erro em buscar_fixture_id para data {data_busca}: {e}")
-            continue
-    logger.error(f"❌ Fixture não localizado para '{nome_jogo}' após buscar em 3 dias.")
-    return None
+    data_hoje = datetime.now().strftime("%Y-%m-%d")
+    url_fixtures = f"https://v3.football.api-sports.io/fixtures?date={data_hoje}"
+    
+    logger.info(f"🔎 Buscando fixture para '{nome_jogo}' em TODOS os jogos da data: {data_hoje}")
+    
+    fixture_id = None
+    try:
+        timeout = aiohttp.ClientTimeout(total=25)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(url_fixtures, headers=headers) as resp:
+                if resp.status != 200:
+                    logger.error(f"Erro ao buscar fixtures: Status {resp.status}")
+                    return None
+                
+                data = await resp.json()
+                jogos = data.get("response", [])
+                logger.info(f"API retornou {len(jogos)} jogos para o dia. Comparando nomes...")
+
+                melhor_match = None
+                maior_similaridade = 0.75 # Limite mínimo de similaridade
+
+                for item in jogos:
+                    teams = item.get("teams", {})
+                    casa = teams.get("home", {}).get("name", "")
+                    fora = teams.get("away", {}).get("name", "")
+                    nome_match_api = f"{casa} x {fora}"
+                    
+                    sim = similaridade(nome_jogo, nome_match_api)
+                    if sim > maior_similaridade:
+                        maior_similaridade = sim
+                        melhor_match = item
+                
+                if melhor_match:
+                    fixture_id = melhor_match.get("fixture", {}).get("id")
+                    api_name = f"{melhor_match['teams']['home']['name']} x {melhor_match['teams']['away']['name']}"
+                    logger.info(f"✅ Fixture encontrado para '{nome_jogo}' ≈ '{api_name}': ID {fixture_id} (Similaridade: {maior_similaridade:.2f})")
+                else:
+                    logger.warning(f"Fixture não localizado para '{nome_jogo}' com similaridade > {maior_similaridade} nos {len(jogos)} jogos de hoje.")
+    
+    except asyncio.TimeoutError:
+        logger.error("Timeout ao baixar a lista de jogos do dia. A resposta pode ser muito grande.")
+        return None
+    except Exception as e:
+        logger.error(f"Erro em buscar_fixture_id: {e}")
+        return None
+        
+    return fixture_id
 
 # --- Funções do Bot 1 (Análise Climática, Odds, Veredito) ---
 
@@ -264,7 +289,6 @@ async def analisar(texto):
 
 # --- Funções do Bot 2 ((CT) Over Gol e HT/FT) ---
 async def processar_sinal_ct(texto_original):
-    # (Seu código original completo aqui, sem alterações)
     ID_PARA_IGNORAR = "1221386"
     if ID_PARA_IGNORAR in texto_original:
         logger.info(f"🚫 Sinal (CT) ignorado pois contém o ID de Seleção proibido: {ID_PARA_IGNORAR}")
@@ -331,12 +355,16 @@ async def processar_sinal_ct(texto_original):
     except Exception as e:
         logger.error(f"Erro ao processar sinal ({tipo_sinal_detectado}): {e}")
 
+async def verificar_resultado_final_geral(fixture_id, msg_original, tipo_sinal, goal_line):
+    # Esta função está incompleta no seu código, precisa ser implementada.
+    # A verificação final para HT/FT e CT é diferente.
+    pass
+
 # --- ROTEADOR E INICIALIZAÇÃO ---
 client = TelegramClient("sessao_sinais", API_ID, API_HASH)
 
 @client.on(events.NewMessage(chats=CHAT_ID_SINAL))
 async def roteador_de_sinais(event):
-    # (Seu código original completo aqui, sem alterações)
     try:
         conteudo = event.message.message
         if not conteudo:
@@ -359,7 +387,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Bot Unificado de Sinais ativo e escutando!")
 
 async def main():
-    # (Seu código original completo aqui, sem alterações)
     try:
         logger.info("🚀 Iniciando Bot Unificado de Sinais")
         logger.info(f"📍 Monitorando chat: {CHAT_ID_SINAL}")
