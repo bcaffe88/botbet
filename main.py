@@ -424,7 +424,6 @@ async def processar_sinal_ct(texto_original):
         logger.info(f"🚫 Sinal (CT) ignorado pois contém o ID de Seleção proibido: {ID_PARA_IGNORAR}")
         return
     
-    # Detecção do tipo de sinal
     tipo_sinal_detectado = "N/A"
     goal_line = None
     if "Estratégia: (CT) Over Gol" in texto_original:
@@ -437,12 +436,16 @@ async def processar_sinal_ct(texto_original):
                 goal_line = float(goal_line_match.group(1))
     elif "Estratégia: Over HT/FT" in texto_original:
         tipo_sinal_detectado = "Over HT/FT"
-        selecao_match = re.search(r"Seleção:\s*(.+)", texto_original)
+        selecao_match = re.search(r"Selecao:\s*(.+)", texto_original)
         if selecao_match:
             selecao_texto = selecao_match.group(1).strip().split('|')[0].strip()
             goal_line_match = re.search(r"([\d.]+)", selecao_texto)
             if goal_line_match:
                 goal_line = float(goal_line_match.group(1))
+        # Se não encontrar a linha de gol, assumimos 0.5, um padrão comum para HT/FT
+        if goal_line is None:
+            goal_line = 0.5
+
 
     if tipo_sinal_detectado == "N/A":
         logger.warning("Sinal de encaminhamento não reconhecido. Abortando.")
@@ -469,9 +472,12 @@ async def processar_sinal_ct(texto_original):
         tipo_match = re.search(r"Tipo:\s*(.+)", texto_original)
         estrategia_match = re.search(r"Estratégia:\s*(.+)", texto_original)
 
-        selecao_formatada = selecao_match.group(1).strip() if selecao_match else "N/A"
-        mercado_texto = mercado_match.group(1).strip().split('|')[0].strip() if mercado_match else "N/A"
-        
+        # --- CORREÇÃO AQUI: Formatação da mensagem para remover IDs ---
+        selecao_raw = selecao_match.group(1).strip() if selecao_match else "N/A"
+        mercado_raw = mercado_match.group(1).strip() if mercado_match else "N/A"
+        selecao_formatada = selecao_raw.split('|')[0].strip()
+        mercado_texto = mercado_raw.split('|')[0].strip()
+
         msg_formatada = f"""ANÁLISE OVERBOT VIP ({tipo_sinal_detectado})\nEvento: {evento}\nCompetição: {competicao_match.group(1).strip() if competicao_match else 'N/A'}\n\nMercado: {mercado_texto}\nSeleção: {selecao_formatada}\nStake: {stake_match.group(1).strip() if stake_match else 'N/A'}\nOdd: {odd_match.group(1).strip() if odd_match else 'N/A'}\nTipo: {tipo_match.group(1).strip() if tipo_match else 'N/A'}\n\nEstratégia: {estrategia_match.group(1).strip() if estrategia_match else 'N/A'}"""
         
         msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg_formatada)
@@ -480,8 +486,16 @@ async def processar_sinal_ct(texto_original):
         fixture_id = await buscar_fixture_id(evento)
         if fixture_id:
             if tipo_sinal_detectado == "(CT) Over Gol":
+                # Lógica para extrair goal_line do sinal CT
+                selecao_texto = selecao_match.group(1).strip().split('|')[0].strip()
+                goal_line_match = re.search(r"([\d.]+)", selecao_texto)
+                goal_line = float(goal_line_match.group(1)) if goal_line_match else 0.5
                 asyncio.create_task(verificar_resultado_final_ct(fixture_id, msg_enviada, goal_line))
             elif tipo_sinal_detectado == "Over HT/FT":
+                # Lógica para extrair goal_line do sinal HT/FT
+                selecao_texto = selecao_match.group(1).strip().split('|')[0].strip()
+                goal_line_match = re.search(r"([\d.]+)", selecao_texto)
+                goal_line = float(goal_line_match.group(1)) if goal_line_match else 0.5
                 asyncio.create_task(verificar_resultado_final_htft(fixture_id, msg_enviada, goal_line))
         else:
             logger.warning(f"Veredito não agendado para '{evento}' ({tipo_sinal_detectado}) pois o fixture ID não foi encontrado.")
