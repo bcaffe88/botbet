@@ -191,8 +191,8 @@ async def verificar_placar_ht_ao_vivo(fixture_id: int) -> int | None:
                     data = await resp.json()
                     if data.get('results', 0) > 0:
                         fixture = data['response'][0]
-                        gols_casa = fixture.get('score', {}).get('halftime', {}).get('home')
-                        gols_fora = fixture.get('score', {}).get('halftime', {}).get('away')
+                        gols_casa = fixture.get('score', {}).get('halftime', {}).get('home', 0)
+                        gols_fora = fixture.get('score', {}).get('halftime', {}).get('away', 0)
                         if gols_casa is not None and gols_fora is not None:
                             total_gols = gols_casa + gols_fora; logger.info(f"✅ Placar HT atual: {total_gols} gols."); return total_gols
                         else:
@@ -201,6 +201,7 @@ async def verificar_placar_ht_ao_vivo(fixture_id: int) -> int | None:
     except Exception as e: logger.error(f"❌ Erro crítico ao verificar placar: {e}")
     return None
 
+# --- NOVA FUNÇÃO DE VEREDITO DINÂMICO PARA HT ---
 async def tarefa_veredito_dinamico_ht(fixture_id, msg_original, goal_line):
     resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"
     try:
@@ -215,12 +216,12 @@ async def tarefa_veredito_dinamico_ht(fixture_id, msg_original, goal_line):
                     data = await resp.json()
                     if data.get('results', 0) > 0:
                         fixture = data['response'][0]
+                        # --- CORREÇÃO: Usando .get() com valor padrão 0 ---
                         gols_casa_ht = fixture.get('score', {}).get('halftime', {}).get('home', 0)
                         gols_fora_ht = fixture.get('score', {}).get('halftime', {}).get('away', 0)
-                        if gols_casa_ht is not None and gols_fora_ht is not None:
-                            gols_ht = gols_casa_ht + gols_fora_ht
-                            resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅" if gols_ht > goal_line else "R E D ❌"
-                        else: logger.warning(f"⚠️ [Over {goal_line} HT] Dados de gols no HT indisponíveis na verificação final.")
+                        
+                        gols_ht = gols_casa_ht + gols_fora_ht
+                        resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅" if gols_ht > goal_line else "R E D ❌"
                     else: logger.warning(f"⚠️ [Over {goal_line} HT] API não retornou dados para fixture na verificação final.")
                 else: resultado_final = "⏳ ERRO NA API"
     except asyncio.CancelledError:
@@ -329,8 +330,8 @@ async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
                         fixture = data['response'][0]
                         gols_casa = fixture.get('score', {}).get('fulltime', {}).get('home', 0)
                         gols_fora = fixture.get('score', {}).get('fulltime', {}).get('away', 0)
+                        total_gols = gols_casa + gols_fora
                         if gols_casa is not None and gols_fora is not None:
-                            total_gols = gols_casa + gols_fora
                             resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅" if total_gols > goal_line else "R E D ❌"
                         else: logger.warning(f"⚠️ [CT Over {goal_line}] Dados de gols FT indisponíveis.")
                     else: logger.warning(f"⚠️ [CT Over {goal_line}] API não retornou dados para fixture.")
