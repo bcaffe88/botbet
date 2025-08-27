@@ -99,7 +99,33 @@ async def buscar_fixture_id(nome_jogo: str) -> int | None:
         
     return fixture_id
 
-# --- FUNÇÃO DE BUSCA DE ODD CORRIGIDA E MAIS ROBUSTA ---
+# --- Funções do Bot 1 (Análise Climática, Odds, Veredito) ---
+
+def analisar_clima(texto):
+    pontos_clima = 0; criterios_clima = []
+    logger.info("🌤️ Iniciando análise climática...")
+    try:
+        temp_match = re.search(r"🌡️\s*([\d.]+)\s*°C", texto)
+        nuvens_match = re.search(r"(☁️|☁)\s*([\d.]+)%", texto)
+        umidade_match = re.search(r"💧\s*([\d.]+)%", texto)
+        vento_match = re.search(r"💨\s*([\d.]+)\s*m/s", texto)
+        temperatura = float(temp_match.group(1)) if temp_match else None
+        nebulosidade = float(nuvens_match.group(2)) if nuvens_match else None
+        umidade = float(umidade_match.group(1)) if umidade_match else None
+        vento = float(vento_match.group(1)) if vento_match else None
+        if temperatura is not None and 18 <= temperatura <= 28: pontos_clima += 1; criterios_clima.append("Temperatura ideal")
+        if nebulosidade is not None and nebulosidade >= 20: pontos_clima += 1; criterios_clima.append("Nebulosidade ideal (sem sol forte)")
+        if umidade is not None and 50 <= umidade <= 75: pontos_clima += 1; criterios_clima.append("Umidade ideal")
+        if vento is not None:
+            if vento <= 7: pontos_clima += 1; criterios_clima.append("Vento ótimo")
+            elif 7 < vento <= 10: pontos_clima += 0.5; criterios_clima.append("Vento moderado")
+    except Exception as e: logger.error(f"Erro na análise climática: {e}")
+    if pontos_clima >= 3.5: status_clima = "🟢 FAVORÁVEL"
+    elif pontos_clima >= 2: status_clima = "🟡 NEUTRO"
+    else: status_clima = "🔴 DESFAVORÁVEL"
+    logger.info(f"🌤️ Pontuação Climática Final: {pontos_clima}/4 - {status_clima}")
+    return pontos_clima, criterios_clima, status_clima
+
 async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
     odd_encontrada = "N/D"
     if not fixture_id: return odd_encontrada
@@ -216,7 +242,6 @@ async def tarefa_veredito_dinamico_ht(fixture_id, msg_original, goal_line):
                     data = await resp.json()
                     if data.get('results', 0) > 0:
                         fixture = data['response'][0]
-                        # --- CORREÇÃO: Usando .get() com valor padrão 0 ---
                         gols_casa_ht = fixture.get('score', {}).get('halftime', {}).get('home', 0)
                         gols_fora_ht = fixture.get('score', {}).get('halftime', {}).get('away', 0)
                         
@@ -331,10 +356,8 @@ async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
                         gols_casa = fixture.get('score', {}).get('fulltime', {}).get('home', 0)
                         gols_fora = fixture.get('score', {}).get('fulltime', {}).get('away', 0)
                         total_gols = gols_casa + gols_fora
-                        if gols_casa is not None and gols_fora is not None:
-                            resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅" if total_gols > goal_line else "R E D ❌"
-                        else: logger.warning(f"⚠️ [CT Over {goal_line}] Dados de gols FT indisponíveis.")
-                    else: logger.warning(f"⚠️ [CT Over {goal_line}] API não retornou dados para fixture.")
+                        resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅" if total_gols > goal_line else "R E D ❌"
+                    else: logger.warning(f"⚠️ [CT Over {goal_line}] Dados de gols FT indisponíveis.")
                 else:
                     resultado_final = "⏳ ERRO NA API"
     except asyncio.CancelledError:
