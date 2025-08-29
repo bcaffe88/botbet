@@ -128,7 +128,8 @@ def analisar_clima(texto):
 
 async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
     odd_encontrada = "N/D"
-    if not fixture_id: return odd_encontrada
+    if not fixture_id:
+        return odd_encontrada
     
     goal_line_str = str(goal_line).replace('.0', '')
     goal_line_str_comma = goal_line_str.replace('.', ',')
@@ -138,10 +139,10 @@ async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
     OVER_PATTERNS = [f'over {goal_line_str}', f'over {goal_line_str_comma}', f'mais {goal_line_str}', f'mais {goal_line_str_comma}', f'> {goal_line_str}', f'> {goal_line_str_comma}']
     
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
-    url_odds = "https://v3.football.api-sports.io/odds"
-    params = {"fixture": str(fixture_id), "live": "true"}
+    url_odds = "https://v3.football.api-sports.io/odds/live"
+    params = {"fixture": str(fixture_id)}
     
-    logger.info(f"🔎 Buscando odd AO VIVO para Over {goal_line} HT no Fixture ID: {fixture_id}")
+    logger.info(f"🔎 Buscando odd AO VIVO para Over {goal_line} HT no Fixture ID: {fixture_id} via endpoint /odds/live")
     
     try:
         async with aiohttp.ClientSession() as session:
@@ -158,7 +159,6 @@ async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
                                 for market in bookmaker.get('bets', []):
                                     market_name = market.get('name', '').lower()
                                     
-                                    # Lógica mais robusta para encontrar o mercado correto
                                     if (any(kw in market_name for kw in KEYWORDS_TEMPO) and 
                                         any(kw in market_name for kw in KEYWORDS_TIPO)):
                                         
@@ -173,9 +173,9 @@ async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
                         
                         logger.warning(f"⚠️ Odd 'Over {goal_line} HT' não encontrada nos mercados para fixture {fixture_id}.")
                     else:
-                        logger.warning(f"⚠️ API /odds não retornou dados para fixture {fixture_id} (results: 0).")
+                        logger.warning(f"⚠️ API /odds/live não retornou dados para fixture {fixture_id} (results: 0).")
                 else: 
-                    logger.error(f"❌ Erro na API /odds: Status {resp_odds.status}")
+                    logger.error(f"❌ Erro na API /odds/live: Status {resp_odds.status}")
     except Exception as e: 
         logger.error(f"❌ Erro crítico em buscar_odd_ao_vivo: {e}")
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
