@@ -128,15 +128,15 @@ def analisar_clima(texto):
 
 async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
     odd_encontrada = "N/D"
-    if not fixture_id:
-        return odd_encontrada
+    if not fixture_id: return odd_encontrada
     
     goal_line_str = str(goal_line).replace('.0', '')
     goal_line_str_comma = goal_line_str.replace('.', ',')
     
-    KEYWORDS_TEMPO = ['first half', '1st half', 'half time', 'ht', '1h', 'meio tempo', 'primeiro tempo', 'intervalo', '1º tempo']
-    KEYWORDS_TIPO = ['over/under', 'total', 'goals', 'gols', 'line']
-    OVER_PATTERNS = [f'over {goal_line_str}', f'over {goal_line_str_comma}', f'mais {goal_line_str}', f'mais {goal_line_str_comma}', f'> {goal_line_str}', f'> {goal_line_str_comma}']
+    # IDs de mercado e padrões de odd conhecidos da API-Football
+    # ID 8 é para 'Goals Over/Under'
+    HT_MARKET_ID = '8' 
+    OVER_PATTERNS = [f'over {goal_line_str}', f'over {goal_line_str_comma}']
     
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
     url_odds = "https://v3.football.api-sports.io/odds/live"
@@ -157,12 +157,12 @@ async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
                         if bookmakers: 
                             for bookmaker in bookmakers:
                                 for market in bookmaker.get('bets', []):
-                                    market_name = market.get('name', '').lower()
+                                    market_id = str(market.get('id'))
                                     
-                                    if (any(kw in market_name for kw in KEYWORDS_TEMPO) and 
-                                        any(kw in market_name for kw in KEYWORDS_TIPO)):
-                                        
-                                        logger.info(f"🎯 Mercado HT compatível encontrado: '{market.get('name')}' (Casa: {bookmaker.get('name')})")
+                                    # Busca pelo ID do mercado em vez de nome
+                                    if market_id == HT_MARKET_ID:
+                                        market_name = market.get('name', 'Mercado Desconhecido')
+                                        logger.info(f"🎯 Mercado 'Goals Over/Under' encontrado (ID: {HT_MARKET_ID}) para a casa: {bookmaker.get('name', 'Desconhecida')}")
 
                                         for value in market.get('values', []):
                                             value_name = value.get('value', '').lower().replace(',', '.')
