@@ -149,6 +149,9 @@ async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
             async with session.get(url_odds, headers=headers, params=params) as resp_odds:
                 if resp_odds.status == 200:
                     data_odds = await resp_odds.json()
+                    # A linha abaixo vai imprimir a resposta completa da API.
+                    logger.info(f"📋 RESPOSTA COMPLETA DA API para fixture {fixture_id}: {data_odds}")
+
                     
                     if data_odds.get('results', 0) > 0 and data_odds.get('response'):
                         fixture_data = data_odds['response'][0]
