@@ -300,15 +300,12 @@ async def analisar(texto):
 
             if gols_ht_atuais is not None and gols_ht_atuais > 0:
                 veredito = f"ENTRADA HT LIMITE | CONFIANÇA: {confianca}"
-                aviso_teste = "\n\n⚠️ *Estratégia 'Over Limite HT' em teste. Faça sua própria análise (DYOR).*"
-                # --- NOVO FILTRO AQUI ---
+                                # --- NOVO FILTRO AQUI ---
                 if confianca != "MUITO ALTA 🔥 STAKE 1%":
                     logger.info(f"❌ Sinal 'Over Limite HT' ignorado por não ter confiança MUITO ALTA.")
                     return
             else:
-                veredito = f"ENTRAR | CONFIANÇA: {confianca}"
-                aviso_teste = ""
-            
+                veredito = f"ENTRAR | CONFIANÇA: {confianca}"                          
             msg = f"""⚽️ {veredito}\n🏟️ {jogo}\n🤖 OVERBOT ANÁLISE:\n⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} \n🌤️ CLIMA: {resumo_clima}\n📊 ODD ATUAL: *{odd_ht}*\n▶️ ENTRADA: {mercado_alvo}{aviso_teste}"""
             msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg, parse_mode='Markdown')
             logger.info(f"✅ Sinal '{mercado_alvo}' enviado para: {jogo}")
