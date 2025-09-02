@@ -131,12 +131,6 @@ async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
     if not fixture_id: return odd_encontrada
     
     goal_line_str = str(goal_line).replace('.0', '')
-    goal_line_str_comma = goal_line_str.replace('.', ',')
-    
-    # IDs de mercado e padrões de odd conhecidos da API-Football
-    # ID 8 é para 'Goals Over/Under'
-    HT_MARKET_ID = '8' 
-    OVER_PATTERNS = [f'over {goal_line_str}', f'over {goal_line_str_comma}']
     
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
     url_odds = "https://v3.football.api-sports.io/odds/live"
@@ -149,9 +143,32 @@ async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
             async with session.get(url_odds, headers=headers, params=params) as resp_odds:
                 if resp_odds.status == 200:
                     data_odds = await resp_odds.json()
-                    # A linha abaixo vai imprimir a resposta completa da API.
-                    logger.info(f"📋 RESPOSTA COMPLETA DA API para fixture {fixture_id}: {data_odds}")
+                    
+                    # --- DEBUG COMPLETO (Sugerido pelo Claude) ---
+                    logger.info(f"🔍 DEBUG - Status Response: {resp_odds.status}")
+                    logger.info(f"🔍 DEBUG - Results Count: {data_odds.get('results', 0)}")
+                    logger.info(f"🔍 DEBUG - Response Exists: {bool(data_odds.get('response'))}")
 
+                    if data_odds.get('response'):
+                        fixture_data = data_odds['response'][0]
+                        bookmakers = fixture_data.get('bookmakers', [])
+                        logger.info(f"🔍 DEBUG - Total Bookmakers: {len(bookmakers)}")
+                        
+                        for bk_idx, bookmaker in enumerate(bookmakers[:2]):
+                            logger.info(f"🔍 BOOKMAKER {bk_idx}: {bookmaker.get('name', 'N/A')}")
+                            markets = bookmaker.get('bets', [])
+                            logger.info(f"🔍 - Total Markets: {len(markets)}")
+                            
+                            for mk_idx, market in enumerate(markets[:5]):
+                                market_name = market.get('name', 'N/A')
+                                market_id = market.get('id', 'N/A')
+                                logger.info(f"🔍 - Market {mk_idx}: ID={market_id}, Name='{market_name}'")
+                                
+                                values = market.get('values', [])
+                                for val_idx, value in enumerate(values[:3]):
+                                    logger.info(f"🔍 -- Value {val_idx}: '{value.get('value', 'N/A')}' = {value.get('odd', 'N/A')}")
+                                    
+                    # --- FIM DO DEBUG COMPLETO ---
                     
                     if data_odds.get('results', 0) > 0 and data_odds.get('response'):
                         fixture_data = data_odds['response'][0]
@@ -162,14 +179,17 @@ async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
                                 for market in bookmaker.get('bets', []):
                                     market_id = str(market.get('id'))
                                     
-                                    # Busca pelo ID do mercado em vez de nome
-                                    if market_id == HT_MARKET_ID:
-                                        market_name = market.get('name', 'Mercado Desconhecido')
-                                        logger.info(f"🎯 Mercado 'Goals Over/Under' encontrado (ID: {HT_MARKET_ID}) para a casa: {bookmaker.get('name', 'Desconhecida')}")
-
+                                    # Removendo o filtro por ID para depuração
+                                    # if market_id == '8': 
+                                    
+                                    # Re-adicionando a busca por padrao para ser mais robusto
+                                    market_name_lower = market.get('name', '').lower()
+                                    if ('over' in market_name_lower or 'total' in market_name_lower) and ('half' in market_name_lower or 'first' in market_name_lower or 'tempo' in market_name_lower):
+                                        logger.info(f"🎯 Mercado HT compatível encontrado: '{market.get('name')}' (Casa: {bookmaker.get('name', 'Desconhecida')})")
+                                        
                                         for value in market.get('values', []):
                                             value_name = value.get('value', '').lower().replace(',', '.')
-                                            if any(pattern in value_name for pattern in OVER_PATTERNS):
+                                            if f'over {goal_line_str}' in value_name:
                                                 odd_value = value.get('odd')
                                                 logger.info(f"🎉 ODD AO VIVO ENCONTRADA (Over {goal_line} HT): {odd_value}")
                                                 return str(odd_value)
@@ -280,40 +300,46 @@ async def analisar(texto):
 
         if deve_entrar:
             logger.info(f"✅ Pontuação suficiente para '{jogo}'. Iniciando validação com API...")
-            fixture_id = await buscar_fixture_id(jogo)
             
+            confianca = ""
             if pontos_total >= 12: confianca = "MUITO ALTA 🔥 STAKE 1%"
             elif pontos_total >= 10: confianca = "ALTA ✅ STAKE 0.75%"
             else: confianca = "MÉDIA ⚠️ STAKE 0.25%"
-            resumo_clima = f" {status_clima} ({pontos_clima}/4pts)"; resumo_tecnico = f" {pontos_tecnicos}/10pts"
-            
-            if not fixture_id:
-                veredito = f"ENTRAR | CONFIANÇA: {confianca}"; odd_ht = "N/D"
-                msg = f"""⚽️ {veredito}\n🏟️ {jogo}\n🤖 OVERBOT ANÁLISE:\n⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} \n🌤️ CLIMA: {resumo_clima}\n📊 ODD ATUAL: *{odd_ht}*\n▶️ ENTRADA: OVER 0.5 HT"""
-                await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg, parse_mode='Markdown')
-                logger.info(f"✅ Sinal enviado para '{jogo}' (sem dados da API)."); logger.warning(f"Veredito não agendado para '{jogo}' pois o fixture ID não pôde ser encontrado."); return
 
-            gols_ht_atuais = await verificar_placar_ht_ao_vivo(fixture_id)
-            if gols_ht_atuais is not None and gols_ht_atuais >= 3:
-                logger.info(f"🚫 SINAL INVÁLIDO! Jogo '{jogo}' já tem 3 ou mais gols no 1º tempo. Ignorando."); return
-            
-            goal_line_alvo = (gols_ht_atuais or 0) + 0.5
-            mercado_alvo = f"Over {goal_line_alvo} HT"
-            odd_ht = await buscar_odd_ao_vivo(fixture_id, goal_line_alvo)
+            # --- CORREÇÃO DE ESCOPO AQUI ---
+            resumo_clima = f" {status_clima} ({pontos_clima}/4pts)"
+            resumo_tecnico = f" {pontos_tecnicos}/10pts"
 
-            if gols_ht_atuais is not None and gols_ht_atuais > 0:
-                veredito = f"ENTRADA HT LIMITE | CONFIANÇA: {confianca}"
-                                # --- NOVO FILTRO AQUI ---
-                if confianca != "MUITO ALTA 🔥 STAKE 1%":
-                    logger.info(f"❌ Sinal 'Over Limite HT' ignorado por não ter confiança MUITO ALTA.")
-                    return
-            else:
-                veredito = f"ENTRAR | CONFIANÇA: {confianca}"                          
-            msg = f"""⚽️ {veredito}\n🏟️ {jogo}\n🤖 OVERBOT ANÁLISE:\n⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} \n🌤️ CLIMA: {resumo_clima}\n📊 ODD ATUAL: *{odd_ht}*\n▶️ ENTRADA: {mercado_alvo}{aviso_teste}"""
-            msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg, parse_mode='Markdown')
-            logger.info(f"✅ Sinal '{mercado_alvo}' enviado para: {jogo}")
-            # >>> Chamada para a nova função de veredito dinâmico de HT
-            asyncio.create_task(tarefa_veredito_dinamico_ht(fixture_id, msg_enviada, goal_line_alvo))
+            # Validação e busca de odds apenas para sinais com confiança MUITO ALTA
+            if confianca == "MUITO ALTA 🔥 STAKE 1%":
+                fixture_id = await buscar_fixture_id(jogo)
+                
+                if not fixture_id:
+                    veredito = f"ENTRAR | CONFIANÇA: {confianca}"; odd_ht = "N/D"
+                    msg = f"""⚽️ {veredito}\n🏟️ {jogo}\n🤖 OVERBOT ANÁLISE:\n⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} \n🌤️ CLIMA: {resumo_clima}\n📊 ODD ATUAL: *{odd_ht}*\n▶️ ENTRADA: OVER 0.5 HT"""
+                    await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg, parse_mode='Markdown')
+                    logger.info(f"✅ Sinal enviado para '{jogo}' (sem dados da API)."); logger.warning(f"Veredito não agendado para '{jogo}' pois o fixture ID não pôde ser encontrado."); return
+
+                gols_ht_atuais = await verificar_placar_ht_ao_vivo(fixture_id)
+                if gols_ht_atuais is not None and gols_ht_atuais >= 3:
+                    logger.info(f"🚫 SINAL INVÁLIDO! Jogo '{jogo}' já tem 3 ou mais gols no 1º tempo. Ignorando."); return
+                
+                goal_line_alvo = (gols_ht_atuais or 0) + 0.5
+                mercado_alvo = f"Over {goal_line_alvo} HT"
+                odd_ht = await buscar_odd_ao_vivo(fixture_id, goal_line_alvo)
+
+                if gols_ht_atuais is not None and gols_ht_atuais > 0:
+                    veredito = f"ENTRADA HT LIMITE | CONFIANÇA: {confianca}"
+                else:
+                    veredito = f"ENTRAR | CONFIANÇA: {confianca}"
+                
+                msg = f"""⚽️ {veredito}\n🏟️ {jogo}\n🤖 OVERBOT ANÁLISE:\n⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} \n🌤️ CLIMA: {resumo_clima}\n📊 ODD ATUAL: *{odd_ht}*\n▶️ ENTRADA: {mercado_alvo}"""
+                msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg, parse_mode='Markdown')
+                logger.info(f"✅ Sinal '{mercado_alvo}' enviado para: {jogo}")
+                asyncio.create_task(tarefa_veredito_dinamico_ht(fixture_id, msg_enviada, goal_line_alvo))
+            
+            else: # Sinais com confiança ALTA ou MÉDIA
+                logger.info(f"❌ Sinal '{jogo}' ignorado por não ter confiança MUITO ALTA.")
 
         else:
             logger.info(f"❌ Critérios insuficientes para '{jogo}'. Sinal ignorado sem uso de API.")
