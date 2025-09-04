@@ -72,6 +72,9 @@ async def buscar_fixture_id(nome_jogo: str) -> int | None:
                 melhor_match = None
                 maior_similaridade = 0.75 # Limite mínimo de similaridade
 
+                # --- LÓGICA DE BUSCA EM CASCATA ---
+                # Primeira tentativa: busca exata por similaridade de nome completo
+                logger.info("  1️⃣ Tentando busca por similaridade de nome completo...")
                 for item in jogos:
                     teams = item.get("teams", {})
                     casa = teams.get("home", {}).get("name", "")
@@ -87,8 +90,39 @@ async def buscar_fixture_id(nome_jogo: str) -> int | None:
                     fixture_id = melhor_match.get("fixture", {}).get("id")
                     api_name = f"{melhor_match['teams']['home']['name']} x {melhor_match['teams']['away']['name']}"
                     logger.info(f"✅ Fixture encontrado para '{nome_jogo}' ≈ '{api_name}': ID {fixture_id} (Similaridade: {maior_similaridade:.2f})")
+                    return fixture_id
                 else:
-                    logger.warning(f"Fixture não localizado para '{nome_jogo}' com similaridade > {maior_similaridade} nos {len(jogos)} jogos de hoje.")
+                    logger.warning(f"  ❌ Primeira busca falhou. Nenhuma similaridade > {maior_similaridade} encontrada.")
+                
+                # Segunda tentativa: busca flexível por palavras-chave
+                logger.info("  2️⃣ Tentando busca flexível por palavras-chave...")
+                try:
+                    time_casa_sinal, time_fora_sinal = nome_jogo.split(' x ')
+                    palavras_casa = set(normalizar(time_casa_sinal).split())
+                    palavras_fora = set(normalizar(time_fora_sinal).split())
+
+                    for item in jogos:
+                        teams = item.get("teams", {})
+                        casa_api = teams.get("home", {}).get("name", "")
+                        fora_api = teams.get("away", {}).get("name", "")
+                        
+                        palavras_casa_api = set(normalizar(casa_api).split())
+                        palavras_fora_api = set(normalizar(fora_api).split())
+                        
+                        # Verifica se a maioria das palavras do sinal está no nome da API
+                        match_casa = len(palavras_casa.intersection(palavras_casa_api)) / len(palavras_casa) if palavras_casa else 0
+                        match_fora = len(palavras_fora.intersection(palavras_fora_api)) / len(palavras_fora) if palavras_fora else 0
+
+                        if match_casa > 0.5 and match_fora > 0.5:
+                            fixture_id = item.get("fixture", {}).get("id")
+                            api_name = f"{casa_api} x {fora_api}"
+                            logger.info(f"✅ Fixture encontrado com busca flexível: '{nome_jogo}' ≈ '{api_name}': ID {fixture_id}")
+                            return fixture_id
+                except ValueError:
+                    logger.warning("  ❌ Não foi possível dividir o nome do jogo para a busca flexível.")
+                    
+                logger.error(f"❌ Fixture não localizado para '{nome_jogo}' após todas as tentativas.")
+                return None
     
     except asyncio.TimeoutError:
         logger.error("Timeout ao baixar a lista de jogos do dia. A resposta pode ser muito grande.")
@@ -202,7 +236,7 @@ async def tarefa_veredito_dinamico_ht(fixture_id, msg_original, goal_line):
     resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"
     try:
         logger.info(f"⏰ [Over {goal_line} HT] Aguardando 35 min para veredito do fixture ID: {fixture_id}")
-        await asyncio.sleep(2100) 
+        await asyncio.sleep(2300) 
         
         headers = {"x-apisports-key": FOOTBALL_API_KEY}
         url = f"https://v3.football.api-sports.io/fixtures?id={fixture_id}"
@@ -317,12 +351,12 @@ async def analisar(texto):
     except Exception as e:
         logger.error(f"Erro na análise principal: {e}"); logger.error(traceback.format_exc())
 
-# --- Funções do Bot 2 ((CT) Over Gol e HT/FT) ---
+# --- Funções do Bot 2 (CT) Over Gol e HT/FT) ---
 async def verificar_resultado_final_ct(fixture_id, msg_original, goal_line):
     resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"
     try:
         logger.info(f"⏰ [CT Over {goal_line}] Aguardando 1h para veredito do fixture ID: {fixture_id}")
-        await asyncio.sleep(3600)
+        await asyncio.sleep(3800)
         headers = {"x-apisports-key": FOOTBALL_API_KEY}
         url = f"https://v3.football.api-sports.io/fixtures?id={fixture_id}"
         async with aiohttp.ClientSession() as session:
@@ -356,7 +390,7 @@ async def verificar_resultado_final_htft(fixture_id, msg_original, goal_line):
     resultado_final = "⏳ RESULTADO NÃO LOCALIZADO"
     try:
         logger.info(f"⏰ [HT/FT] Aguardando 1h para veredito do fixture ID: {fixture_id}")
-        await asyncio.sleep(3600)
+        await asyncio.sleep(3800)
         
         headers = {"x-apisports-key": FOOTBALL_API_KEY}
         url = f"https://v3.football.api-sports.io/fixtures?id={fixture_id}"
