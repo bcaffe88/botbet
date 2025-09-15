@@ -299,15 +299,15 @@ async def analisar(texto):
         if posse[0] >= 60 or posse[1] >= 60: criterios_tecnicos.append("Posse dominante"); pontos_tecnicos += 1
         
         pontos_total = pontos_tecnicos + pontos_clima
-        deve_entrar = pontos_total >= 10
+        deve_entrar = pontos_total >= 9.0
         logger.info(f"📈 Pontos Técnicos: {pontos_tecnicos}/10 | 🌤️ Pontos Clima: {pontos_clima}/4 | 🎯 Total: {pontos_total}")
 
         if deve_entrar:
             logger.info(f"✅ Pontuação suficiente para '{jogo}'. Iniciando validação com API...")
             
             confianca = ""
-            if pontos_total >= 13: confianca = "MUITO ALTA 🔥 STAKE 1%"
-            elif pontos_total >= 11: confianca = "ALTA ✅ STAKE 0.75%"
+            if pontos_total >= 12: confianca = "MUITO ALTA 🔥 STAKE 1%"
+            elif pontos_total >= 10: confianca = "ALTA ✅ STAKE 0.75%"
             else: confianca = "MÉDIA ⚠️ STAKE 0.25%"
 
             resumo_clima = f" {status_clima} ({pontos_clima}/4pts)"
