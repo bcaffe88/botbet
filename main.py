@@ -371,11 +371,11 @@ async def analisar(texto):
         
         logger.info(f"📈 Pontos Técnicos: {pontos_tecnicos}/10 | 🌤️ Pontos Clima: {pontos_clima}/4 | 🎯 Total: {pontos_total}")
 
-        # SOMENTE CONFIANÇA MUITO ALTA (>= 12 pontos)
-        if pontos_total >= 12:
-            logger.info(f"✅ Pontuação MUITO ALTA ({pontos_total}) para '{jogo}'. Iniciando validação com API...")
+        # SOMENTE CONFIANÇA ALTA (>= 10 e < 12 pontos)
+        if pontos_total >= 10 and pontos_total < 12:
+            logger.info(f"✅ Pontuação ALTA ({pontos_total}) para '{jogo}'. Iniciando validação com API...")
             
-            confianca = "MUITO ALTA 🔥 STAKE 1%"
+            confianca = "ALTA ✅ STAKE 0.75%"
 
             resumo_clima = f" {status_clima} ({pontos_clima}/4pts)"
             resumo_tecnico = f" {pontos_tecnicos}/10pts"
@@ -413,7 +413,7 @@ async def analisar(texto):
             asyncio.create_task(tarefa_veredito_dinamico_ht(fixture_id, msg_enviada, goal_line_alvo))
         
         else:
-            logger.info(f"❌ Pontuação insuficiente ({pontos_total}) para '{jogo}'. Necessário >= 12 para CONFIANÇA MUITO ALTA. Sinal ignorado.")
+            logger.info(f"❌ Pontuação insuficiente ({pontos_total}) para '{jogo}'. Necessário >= 10 e < 12 para CONFIANÇA ALTA. Sinal ignorado.")
     
     except Exception as e:
         logger.error(f"Erro na análise principal: {e}")
@@ -437,11 +437,11 @@ async def roteador_de_sinais(event):
         logger.error(f"Erro no roteador de sinais: {e}")
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🤖 Bot Over HT (Confiança Muito Alta) ativo e escutando!")
+    await update.message.reply_text("🤖 Bot Over HT (Confiança Alta) ativo e escutando!")
 
 async def main():
     try:
-        logger.info("🚀 Iniciando Bot Over HT - Apenas Confiança MUITO ALTA")
+        logger.info("🚀 Iniciando Bot Over HT - Apenas Confiança ALTA")
         logger.info(f"📍 Monitorando chat: {CHAT_ID_SINAL}")
         logger.info(f"📍 Enviando para: {CHAT_ID_DESTINO}")
         
