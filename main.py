@@ -38,6 +38,9 @@ except ValueError as e:
 # Inicializar bot
 bot = Bot(token=BOT_TOKEN)
 
+ALTA_STAKE = "0.75%"
+MUITO_ALTA_STAKE = "1%"
+
 # --- Funções Utilitárias ---
 def normalizar(texto):
     if not texto: return ""
@@ -374,7 +377,11 @@ async def analisar(texto):
         # SOMENTE CONFIANÇA ALTA (>= 10 pontos)
         if pontos_total >= 10:
             nivel_confianca = "ALTA" if pontos_total < 12 else "MUITO ALTA"
-            confianca = "ALTA ✅ STAKE 0.75%" if nivel_confianca == "ALTA" else "MUITO ALTA ✅✅ STAKE 1%"
+            confianca_map = {
+                "ALTA": f"ALTA ✅ STAKE {ALTA_STAKE}",
+                "MUITO ALTA": f"MUITO ALTA ✅✅ STAKE {MUITO_ALTA_STAKE}"
+            }
+            confianca = confianca_map[nivel_confianca]
             logger.info(f"✅ Pontuação {nivel_confianca} ({pontos_total}) para '{jogo}'. Iniciando validação com API...")
 
             resumo_clima = f" {status_clima} ({pontos_clima}/4pts)"
