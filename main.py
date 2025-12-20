@@ -69,7 +69,7 @@ async def buscar_fixture_id(nome_jogo: str) -> int | None:
     if not nome_jogo or not FOOTBALL_API_KEY:
         return None
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
-    data_hoje = datetime.now().strftime("%Y-%m-%d")
+    data_hoje = datetime.now(OPERATING_TZ).strftime("%Y-%m-%d")
     url_fixtures = f"https://v3.football.api-sports.io/fixtures?date={data_hoje}"
     
     logger.info(f"🔎 Buscando fixture para '{nome_jogo}' em TODOS os jogos da data: {data_hoje}")
