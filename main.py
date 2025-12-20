@@ -371,11 +371,11 @@ async def analisar(texto):
         
         logger.info(f"📈 Pontos Técnicos: {pontos_tecnicos}/10 | 🌤️ Pontos Clima: {pontos_clima}/4 | 🎯 Total: {pontos_total}")
 
-        # SOMENTE CONFIANÇA ALTA (>= 10 e < 12 pontos)
-        if pontos_total >= 10 and pontos_total < 12:
-            logger.info(f"✅ Pontuação ALTA ({pontos_total}) para '{jogo}'. Iniciando validação com API...")
-            
-            confianca = "ALTA ✅ STAKE 0.75%"
+        # SOMENTE CONFIANÇA ALTA (>= 10 pontos)
+        if pontos_total >= 10:
+            nivel_confianca = "ALTA" if pontos_total < 12 else "MUITO ALTA"
+            confianca = "ALTA ✅ STAKE 0.75%" if nivel_confianca == "ALTA" else "MUITO ALTA ✅✅ STAKE 1%"
+            logger.info(f"✅ Pontuação {nivel_confianca} ({pontos_total}) para '{jogo}'. Iniciando validação com API...")
 
             resumo_clima = f" {status_clima} ({pontos_clima}/4pts)"
             resumo_tecnico = f" {pontos_tecnicos}/10pts"
@@ -413,7 +413,7 @@ async def analisar(texto):
             asyncio.create_task(tarefa_veredito_dinamico_ht(fixture_id, msg_enviada, goal_line_alvo))
         
         else:
-            logger.info(f"❌ Pontuação insuficiente ({pontos_total}) para '{jogo}'. Necessário >= 10 e < 12 para CONFIANÇA ALTA. Sinal ignorado.")
+            logger.info(f"❌ Pontuação insuficiente ({pontos_total}) para '{jogo}'. Necessário >= 10 para CONFIANÇA ALTA/MUITO ALTA. Sinal ignorado.")
     
     except Exception as e:
         logger.error(f"Erro na análise principal: {e}")
