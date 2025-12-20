@@ -40,6 +40,10 @@ bot = Bot(token=BOT_TOKEN)
 
 ALTA_STAKE = "0.75%"
 MUITO_ALTA_STAKE = "1%"
+CONFIDENCE_MAP = {
+    "ALTA": f"ALTA ✅ STAKE {ALTA_STAKE}",
+    "MUITO ALTA": f"MUITO ALTA ✅✅ STAKE {MUITO_ALTA_STAKE}"
+}
 
 # --- Funções Utilitárias ---
 def normalizar(texto):
@@ -298,7 +302,7 @@ async def tarefa_veredito_dinamico_ht(fixture_id, msg_original, goal_line):
             except Exception as edit_error:
                 logger.error(f"❌ Falha ao editar mensagem para fixture {fixture_id}: {edit_error}")
 
-# --- Análise Principal (SOMENTE CONFIANÇA MUITO ALTA) ---
+# --- Análise Principal (CONFIANÇA ALTA/MUITO ALTA) ---
 async def analisar(texto):
     logger.info("📊 Iniciando análise do sinal 'Over 0.5 HT'")
     try:
@@ -377,11 +381,7 @@ async def analisar(texto):
         # SOMENTE CONFIANÇA ALTA (>= 10 pontos)
         if pontos_total >= 10:
             nivel_confianca = "ALTA" if pontos_total < 12 else "MUITO ALTA"
-            confianca_map = {
-                "ALTA": f"ALTA ✅ STAKE {ALTA_STAKE}",
-                "MUITO ALTA": f"MUITO ALTA ✅✅ STAKE {MUITO_ALTA_STAKE}"
-            }
-            confianca = confianca_map[nivel_confianca]
+            confianca = CONFIDENCE_MAP[nivel_confianca]
             logger.info(f"✅ Pontuação {nivel_confianca} ({pontos_total}) para '{jogo}'. Iniciando validação com API...")
 
             resumo_clima = f" {status_clima} ({pontos_clima}/4pts)"
