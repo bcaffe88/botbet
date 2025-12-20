@@ -2,6 +2,7 @@ import os
 import re
 import unicodedata
 import asyncio
+from zoneinfo import ZoneInfo
 import logging
 from datetime import datetime
 from difflib import SequenceMatcher
@@ -43,6 +44,7 @@ MUITO_ALTA_STAKE = "1%"
 VERY_HIGH_CONFIDENCE_THRESHOLD = 12
 OPERATING_START_HOUR = 8   # 08:00 local time
 OPERATING_END_HOUR = 0     # 00:00 local time (next day boundary)
+OPERATING_TZ = ZoneInfo("America/Sao_Paulo")
 CONFIDENCE_MAP = {
     "ALTA": f"ALTA ✅ STAKE {ALTA_STAKE}",
     "MUITO ALTA": f"MUITO ALTA ✅✅ STAKE {MUITO_ALTA_STAKE}"
@@ -313,7 +315,7 @@ async def tarefa_veredito_dinamico_ht(fixture_id, msg_original, goal_line):
 
 # --- Análise Principal (CONFIANÇA ALTA/MUITO ALTA) ---
 async def analisar(texto):
-    hora_atual = datetime.now().astimezone().hour
+    hora_atual = datetime.now(OPERATING_TZ).hour
     if not dentro_janela_operacao(hora_atual):
         logger.info(f"⏸️ Fora da janela de operação ({hora_atual}h). Sinal ignorado.")
         return
