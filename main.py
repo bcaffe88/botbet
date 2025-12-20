@@ -41,6 +41,8 @@ bot = Bot(token=BOT_TOKEN)
 ALTA_STAKE = "0.75%"
 MUITO_ALTA_STAKE = "1%"
 VERY_HIGH_CONFIDENCE_THRESHOLD = 12
+OPERATING_START_HOUR = 8   # 08:00 local time
+OPERATING_END_HOUR = 24    # 00:00 local time (inclusive start, exclusive end)
 CONFIDENCE_MAP = {
     "ALTA": f"ALTA ✅ STAKE {ALTA_STAKE}",
     "MUITO ALTA": f"MUITO ALTA ✅✅ STAKE {MUITO_ALTA_STAKE}"
@@ -305,6 +307,10 @@ async def tarefa_veredito_dinamico_ht(fixture_id, msg_original, goal_line):
 
 # --- Análise Principal (CONFIANÇA ALTA/MUITO ALTA) ---
 async def analisar(texto):
+    hora_atual = datetime.now().hour
+    if hora_atual < OPERATING_START_HOUR or hora_atual >= OPERATING_END_HOUR:
+        logger.info(f"⏸️ Fora da janela de operação ({hora_atual}h). Sinal ignorado.")
+        return
     logger.info("📊 Iniciando análise do sinal 'Over 0.5 HT'")
     try:
         jogo_match = re.search(r'⚽️\s*(.+)', texto)
