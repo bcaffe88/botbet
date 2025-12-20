@@ -40,6 +40,7 @@ bot = Bot(token=BOT_TOKEN)
 
 ALTA_STAKE = "0.75%"
 MUITO_ALTA_STAKE = "1%"
+VERY_HIGH_CONFIDENCE_THRESHOLD = 12
 CONFIDENCE_MAP = {
     "ALTA": f"ALTA ✅ STAKE {ALTA_STAKE}",
     "MUITO ALTA": f"MUITO ALTA ✅✅ STAKE {MUITO_ALTA_STAKE}"
@@ -380,7 +381,7 @@ async def analisar(texto):
 
         # SOMENTE CONFIANÇA ALTA (>= 10 pontos)
         if pontos_total >= 10:
-            nivel_confianca = "ALTA" if pontos_total < 12 else "MUITO ALTA"
+            nivel_confianca = "ALTA" if pontos_total < VERY_HIGH_CONFIDENCE_THRESHOLD else "MUITO ALTA"
             confianca = CONFIDENCE_MAP[nivel_confianca]
             logger.info(f"✅ Pontuação {nivel_confianca} ({pontos_total}) para '{jogo}'. Iniciando validação com API...")
 
