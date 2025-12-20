@@ -42,11 +42,17 @@ ALTA_STAKE = "0.75%"
 MUITO_ALTA_STAKE = "1%"
 VERY_HIGH_CONFIDENCE_THRESHOLD = 12
 OPERATING_START_HOUR = 8   # 08:00 local time
-OPERATING_END_HOUR = 24    # 00:00 local time (inclusive start, exclusive end)
+OPERATING_END_HOUR = 0     # 00:00 local time (next day boundary)
 CONFIDENCE_MAP = {
     "ALTA": f"ALTA ✅ STAKE {ALTA_STAKE}",
     "MUITO ALTA": f"MUITO ALTA ✅✅ STAKE {MUITO_ALTA_STAKE}"
 }
+
+def dentro_janela_operacao(hora: int) -> bool:
+    """Retorna True se hora está entre 08:00 e 00:00 (faixa cruzando meia-noite)."""
+    if OPERATING_END_HOUR > OPERATING_START_HOUR:
+        return OPERATING_START_HOUR <= hora < OPERATING_END_HOUR
+    return hora >= OPERATING_START_HOUR or hora < OPERATING_END_HOUR
 
 # --- Funções Utilitárias ---
 def normalizar(texto):
@@ -307,8 +313,8 @@ async def tarefa_veredito_dinamico_ht(fixture_id, msg_original, goal_line):
 
 # --- Análise Principal (CONFIANÇA ALTA/MUITO ALTA) ---
 async def analisar(texto):
-    hora_atual = datetime.now().hour
-    if hora_atual < OPERATING_START_HOUR or hora_atual >= OPERATING_END_HOUR:
+    hora_atual = datetime.now().astimezone().hour
+    if not dentro_janela_operacao(hora_atual):
         logger.info(f"⏸️ Fora da janela de operação ({hora_atual}h). Sinal ignorado.")
         return
     logger.info("📊 Iniciando análise do sinal 'Over 0.5 HT'")
