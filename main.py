@@ -50,7 +50,7 @@ CONFIDENCE_MAP = {
 
 def dentro_janela_operacao(hora: int) -> bool:
     """Retorna True se hora está entre 08:00 e 00:00 (faixa cruzando meia-noite)."""
-    if OPERATING_END_HOUR > OPERATING_START_HOUR:
+    if OPERATING_START_HOUR < OPERATING_END_HOUR:
         return OPERATING_START_HOUR <= hora < OPERATING_END_HOUR
     return hora >= OPERATING_START_HOUR or hora < OPERATING_END_HOUR
 
