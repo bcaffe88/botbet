@@ -1,6 +1,5 @@
 import os
 import json
-import sqlite3
 import asyncio
 import logging
 import unicodedata
@@ -91,7 +90,11 @@ def similaridade(a: str, b: str) -> float:
 
 
 def usar_postgres() -> bool:
-    return bool(PG_DSN or PG_HOST) and psycopg2 is not None
+    if psycopg2 is None:
+        raise RuntimeError("psycopg2 não instalado; Postgres é obrigatório.")
+    if not (PG_DSN or (PG_HOST and PG_USER and PG_PASSWORD and PG_DATABASE)):
+        raise RuntimeError("Variáveis do Postgres ausentes: defina DATABASE_URL ou PGHOST/PGUSER/PGPASSWORD/PGDATABASE.")
+    return True
 
 
 def _get_pg_conn():
@@ -107,12 +110,10 @@ def _get_pg_conn():
 
 
 def _get_conn():
-    if usar_postgres():
-        conn = _get_pg_conn()
-        conn.autocommit = True
-        return conn
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    return sqlite3.connect(DB_PATH)
+    usar_postgres()
+    conn = _get_pg_conn()
+    conn.autocommit = True
+    return conn
 
 
 def _ordenar_dupla(time1: str, time2: str) -> Tuple[str, str, str, str]:
@@ -129,94 +130,48 @@ def init_db():
     try:
         with _get_conn() as conn:
             cur = conn.cursor()
-            if usar_postgres():
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS historico_resumos (
-                        id SERIAL PRIMARY KEY,
-                        time1 TEXT NOT NULL,
-                        time2 TEXT NOT NULL,
-                        time1_norm TEXT NOT NULL,
-                        time2_norm TEXT NOT NULL,
-                        resumo TEXT NOT NULL,
-                        gols_1t_time1 INTEGER,
-                        gols_1t_time2 INTEGER,
-                        confrontos_json TEXT,
-                        tendencia TEXT,
-                        odd_registrada TEXT DEFAULT '',
-                        data_ref DATE DEFAULT CURRENT_DATE,
-                        created_at TIMESTAMPTZ DEFAULT NOW(),
-                        updated_at TIMESTAMPTZ DEFAULT NOW()
-                    );
-                    """
-                )
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS fixtures_cache (
-                        id SERIAL PRIMARY KEY,
-                        fixture_id BIGINT UNIQUE,
-                        time1 TEXT NOT NULL,
-                        time2 TEXT NOT NULL,
-                        time1_norm TEXT NOT NULL,
-                        time2_norm TEXT NOT NULL,
-                        odd_referencia TEXT,
-                        status TEXT DEFAULT 'PENDENTE',
-                        gols_ht INTEGER,
-                        gols_ft INTEGER,
-                        resultado TEXT,
-                        data_jogo TIMESTAMPTZ,
-                        created_at TIMESTAMPTZ DEFAULT NOW(),
-                        updated_at TIMESTAMPTZ DEFAULT NOW()
-                    );
-                    """
-                )
-                cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_hr_unique ON historico_resumos(time1_norm, time2_norm, data_ref, odd_registrada);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_fx_times ON fixtures_cache(time1_norm, time2_norm, updated_at);")
-            else:
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS historico_resumos (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        time1 TEXT NOT NULL,
-                        time2 TEXT NOT NULL,
-                        time1_norm TEXT NOT NULL,
-                        time2_norm TEXT NOT NULL,
-                        resumo TEXT NOT NULL,
-                        gols_1t_time1 INTEGER,
-                        gols_1t_time2 INTEGER,
-                        confrontos_json TEXT,
-                        tendencia TEXT,
-                        odd_registrada TEXT DEFAULT '',
-                        data_ref TEXT DEFAULT (strftime('%Y-%m-%d','now','utc')),
-                        created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now','utc')),
-                        updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now','utc'))
-                    );
-                    """
-                )
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS fixtures_cache (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        fixture_id INTEGER UNIQUE,
-                        time1 TEXT NOT NULL,
-                        time2 TEXT NOT NULL,
-                        time1_norm TEXT NOT NULL,
-                        time2_norm TEXT NOT NULL,
-                        odd_referencia TEXT,
-                        status TEXT DEFAULT 'PENDENTE',
-                        gols_ht INTEGER,
-                        gols_ft INTEGER,
-                        resultado TEXT,
-                        data_jogo TEXT,
-                        created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now','utc')),
-                        updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now','utc'))
-                    );
-                    """
-                )
-                cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_hr_unique ON historico_resumos(time1_norm, time2_norm, data_ref, odd_registrada);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_fx_times ON fixtures_cache(time1_norm, time2_norm, updated_at);")
-            if not usar_postgres():
-                conn.commit()
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS historico_resumos (
+                    id SERIAL PRIMARY KEY,
+                    time1 TEXT NOT NULL,
+                    time2 TEXT NOT NULL,
+                    time1_norm TEXT NOT NULL,
+                    time2_norm TEXT NOT NULL,
+                    resumo TEXT NOT NULL,
+                    gols_1t_time1 INTEGER,
+                    gols_1t_time2 INTEGER,
+                    confrontos_json TEXT,
+                    tendencia TEXT,
+                    odd_registrada TEXT DEFAULT '',
+                    data_ref DATE DEFAULT CURRENT_DATE,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS fixtures_cache (
+                    id SERIAL PRIMARY KEY,
+                    fixture_id BIGINT UNIQUE,
+                    time1 TEXT NOT NULL,
+                    time2 TEXT NOT NULL,
+                    time1_norm TEXT NOT NULL,
+                    time2_norm TEXT NOT NULL,
+                    odd_referencia TEXT,
+                    status TEXT DEFAULT 'PENDENTE',
+                    gols_ht INTEGER,
+                    gols_ft INTEGER,
+                    resultado TEXT,
+                    data_jogo TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                """
+            )
+            cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_hr_unique ON historico_resumos(time1_norm, time2_norm, data_ref, odd_registrada);")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_fx_times ON fixtures_cache(time1_norm, time2_norm, updated_at);")
     except Exception as e:
         logger.error(f"Erro ao inicializar o banco de dados: {e}")
 
@@ -294,25 +249,14 @@ def salvar_fixture_pendente(time1: str, time2: str, fixture_id: Optional[int], o
         time1_ord, time2_ord, t1_norm, t2_norm = _ordenar_dupla(time1, time2)
         with _get_conn() as conn:
             cur = conn.cursor()
-            if usar_postgres():
-                cur.execute(
-                    """
-                    INSERT INTO fixtures_cache (fixture_id, time1, time2, time1_norm, time2_norm, odd_referencia, status, data_jogo, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, 'PENDENTE', %s, NOW(), NOW())
-                    ON CONFLICT (fixture_id) DO UPDATE SET odd_referencia = EXCLUDED.odd_referencia, updated_at = NOW(), status = 'PENDENTE';
-                    """,
-                    (fixture_id, time1_ord, time2_ord, t1_norm, t2_norm, odd_referencia, data_jogo),
-                )
-            else:
-                cur.execute(
-                    """
-                    INSERT OR REPLACE INTO fixtures_cache (fixture_id, time1, time2, time1_norm, time2_norm, odd_referencia, status, data_jogo, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, 'PENDENTE', ?, strftime('%Y-%m-%dT%H:%M:%SZ','now','utc'));
-                    """,
-                    (fixture_id, time1_ord, time2_ord, t1_norm, t2_norm, odd_referencia, data_jogo),
-                )
-            if not usar_postgres():
-                conn.commit()
+            cur.execute(
+                """
+                INSERT INTO fixtures_cache (fixture_id, time1, time2, time1_norm, time2_norm, odd_referencia, status, data_jogo, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, 'PENDENTE', %s, NOW(), NOW())
+                ON CONFLICT (fixture_id) DO UPDATE SET odd_referencia = EXCLUDED.odd_referencia, updated_at = NOW(), status = 'PENDENTE';
+                """,
+                (fixture_id, time1_ord, time2_ord, t1_norm, t2_norm, odd_referencia, data_jogo),
+            )
     except Exception as e:
         logger.error(f"Erro ao salvar fixture pendente: {e}")
 
@@ -325,26 +269,14 @@ def atualizar_fixture_resultado(fixture_id: Optional[int], gols_ht: Optional[int
         init_db()
         with _get_conn() as conn:
             cur = conn.cursor()
-            if usar_postgres():
-                cur.execute(
-                    """
-                    UPDATE fixtures_cache
-                    SET gols_ht = %s, gols_ft = %s, resultado = %s, status = 'FINALIZADO', data_jogo = COALESCE(%s, data_jogo), updated_at = NOW()
-                    WHERE fixture_id = %s;
-                    """,
-                    (gols_ht, gols_ft, resultado, data_jogo, fixture_id),
-                )
-            else:
-                cur.execute(
-                    """
-                    UPDATE fixtures_cache
-                    SET gols_ht = ?, gols_ft = ?, resultado = ?, status = 'FINALIZADO', data_jogo = COALESCE(?, data_jogo), updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now','utc')
-                    WHERE fixture_id = ?;
-                    """,
-                    (gols_ht, gols_ft, resultado, data_jogo, fixture_id),
-                )
-            if not usar_postgres():
-                conn.commit()
+            cur.execute(
+                """
+                UPDATE fixtures_cache
+                SET gols_ht = %s, gols_ft = %s, resultado = %s, status = 'FINALIZADO', data_jogo = COALESCE(%s, data_jogo), updated_at = NOW()
+                WHERE fixture_id = %s;
+                """,
+                (gols_ht, gols_ft, resultado, data_jogo, fixture_id),
+            )
     except Exception as e:
         logger.error(f"Erro ao atualizar fixture: {e}")
 
@@ -356,30 +288,17 @@ def obter_metricas_historicas(time1: str, time2: str, max_rows: int = 10) -> Tup
         _, _, t1_norm, t2_norm = _ordenar_dupla(time1, time2)
         with _get_conn() as conn:
             cur = conn.cursor()
-            if usar_postgres():
-                cur.execute(
-                    """
-                    SELECT gols_ht, resultado
-                    FROM fixtures_cache
-                    WHERE time1_norm = %s AND time2_norm = %s AND status = 'FINALIZADO'
-                    ORDER BY updated_at DESC
-                    LIMIT %s;
-                    """,
-                    (t1_norm, t2_norm, max_rows),
-                )
-                rows = cur.fetchall()
-            else:
-                cur.execute(
-                    """
-                    SELECT gols_ht, resultado
-                    FROM fixtures_cache
-                    WHERE time1_norm = ? AND time2_norm = ? AND status = 'FINALIZADO'
-                    ORDER BY datetime(updated_at) DESC
-                    LIMIT ?;
-                    """,
-                    (t1_norm, t2_norm, max_rows),
-                )
-                rows = cur.fetchall()
+            cur.execute(
+                """
+                SELECT gols_ht, resultado
+                FROM fixtures_cache
+                WHERE time1_norm = %s AND time2_norm = %s AND status = 'FINALIZADO'
+                ORDER BY updated_at DESC
+                LIMIT %s;
+                """,
+                (t1_norm, t2_norm, max_rows),
+            )
+            rows = cur.fetchall()
         if not rows:
             return 0.0, None
         com_gol = sum(1 for r in rows if r[0] and r[0] > 0)
@@ -392,10 +311,6 @@ def obter_metricas_historicas(time1: str, time2: str, max_rows: int = 10) -> Tup
 
 def carregar_resumo_recente(time1: str, time2: str) -> Optional[Dict[str, Any]]:
     """Recupera resumo recente salvo no banco para evitar chamadas repetidas à API"""
-    if not DB_PATH.exists():
-        if not usar_postgres():
-            return None
-
     _, _, t1_norm, t2_norm = _ordenar_dupla(time1, time2)
     # SQLite datetime('now','utc') usa o formato abaixo; mantemos a mesma assinatura para comparações
     limite = (datetime.now(timezone.utc) - timedelta(days=MAX_CACHE_DIAS)).strftime(
@@ -405,35 +320,20 @@ def carregar_resumo_recente(time1: str, time2: str) -> Optional[Dict[str, Any]]:
     try:
         with _get_conn() as conn:
             cur = conn.cursor()
-            if usar_postgres():
-                cur.execute(
-                    """
-                    SELECT resumo, confrontos_json, tendencia, odd_registrada, gols_1t_time1, gols_1t_time2, created_at
-                    FROM historico_resumos
-                    WHERE time1_norm = %s AND time2_norm = %s AND created_at >= %s::timestamptz
-                    ORDER BY created_at DESC
-                    LIMIT 1;
-                    """,
-                    (t1_norm, t2_norm, limite),
-                )
-                row = cur.fetchone()
-                if row:
-                    keys = ["resumo", "confrontos_json", "tendencia", "odd_registrada", "gols_1t_time1", "gols_1t_time2", "criado_em"]
-                    return dict(zip(keys, row))
-            else:
-                conn.row_factory = sqlite3.Row
-                row = conn.execute(
-                    """
-                    SELECT resumo, confrontos_json, tendencia, odd_registrada, gols_1t_time1, gols_1t_time2, created_at as criado_em
-                    FROM historico_resumos
-                    WHERE time1_norm = ? AND time2_norm = ? AND datetime(created_at) >= ?
-                    ORDER BY datetime(created_at) DESC
-                    LIMIT 1;
-                    """,
-                    (t1_norm, t2_norm, limite),
-                ).fetchone()
-                if row:
-                    return dict(row)
+            cur.execute(
+                """
+                SELECT resumo, confrontos_json, tendencia, odd_registrada, gols_1t_time1, gols_1t_time2, created_at
+                FROM historico_resumos
+                WHERE time1_norm = %s AND time2_norm = %s AND created_at >= %s::timestamptz
+                ORDER BY created_at DESC
+                LIMIT 1;
+                """,
+                (t1_norm, t2_norm, limite),
+            )
+            row = cur.fetchone()
+            if row:
+                keys = ["resumo", "confrontos_json", "tendencia", "odd_registrada", "gols_1t_time1", "gols_1t_time2", "criado_em"]
+                return dict(zip(keys, row))
     except Exception as e:
         logger.error(f"Erro ao carregar resumo do banco: {e}")
 

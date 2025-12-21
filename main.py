@@ -416,10 +416,10 @@ async def analisar(texto):
         nomes_times = extrair_times(jogo)
         if len(nomes_times) == 2:
             perc_hist, ultimo_res = obter_metricas_historicas(nomes_times[0], nomes_times[1])
-            if perc_hist >= 0.6:
+            if perc_hist >= 0.65:
                 bonus_hist += 1
                 criterios_tecnicos.append("Histórico próprio favorável")
-            elif perc_hist >= 0.4:
+            elif perc_hist >= 0.5:
                 bonus_hist += 0.5
                 criterios_tecnicos.append("Histórico próprio moderado")
             if ultimo_res and "RED" in ultimo_res:
