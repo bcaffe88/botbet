@@ -21,6 +21,7 @@ STRIPE_API_KEY = os.getenv("STRIPE_API_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", "895248440"))
 CHANNEL_ID_ADMIN = os.getenv("CHANNEL_ID_ADMIN") or os.getenv("CHANNEL_ID")
+BOT_USERNAME_ADMIN = os.getenv("BOT_USERNAME_ADMIN", "overbotvip_bot")
 
 STRIPE_LINK_MENSAL = os.getenv("STRIPE_LINK_MENSAL")
 STRIPE_LINK_VITALICIO = os.getenv("STRIPE_LINK_VITALICIO")
@@ -379,9 +380,9 @@ def health_check():
 
 @app.before_request
 def _bootstrap_tables():
-    if not task_control.get("last_run"):
+    if not task_control.get("tables_created"):
         ensure_tables()
-        task_control["last_run"] = task_control.get("last_run")
+        task_control["tables_created"] = True
 
 
 LANDING_TEMPLATE = """
@@ -494,7 +495,7 @@ def landing_page():
         channel=CHANNEL_ID_ADMIN,
         link_mensal=STRIPE_LINK_MENSAL,
         link_vitalicio=STRIPE_LINK_VITALICIO,
-        botadmin="botadmin",
+        botadmin=BOT_USERNAME_ADMIN,
     )
 
 

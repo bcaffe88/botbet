@@ -298,7 +298,7 @@ async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
                                 if bookmakers:
                                     for bookmaker in bookmakers:
                                         for market in bookmaker.get('bets', []):
-                                        if eh_mercado_primeiro_tempo_over(market.get('name', '')):
+                                            if eh_mercado_primeiro_tempo_over(market.get('name', '')):
                                                 logger.info(f"🎯 Mercado HT compatível encontrado: '{market.get('name')}'")
                                                 
                                                 for value in market.get('values', []):
