@@ -5,7 +5,7 @@ Tests utility functions, climate analysis, signal analysis, and API integrations
 import os
 import pytest
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, Mock
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -20,6 +20,40 @@ os.environ.setdefault("DATABASE_URL", "postgres://user:pass@localhost/db")
 
 # Import main module after setting environment variables
 import main  # noqa: E402
+
+
+class MockResponse:
+    """Helper class to mock aiohttp response."""
+    def __init__(self, status, json_data):
+        self.status = status
+        self._json_data = json_data
+    
+    async def json(self):
+        return self._json_data
+    
+    async def __aenter__(self):
+        return self
+    
+    async def __aexit__(self, exc_type, exc, tb):
+        pass
+
+
+class MockClientSession:
+    """Helper class to mock aiohttp ClientSession."""
+    def __init__(self, responses):
+        self.responses = responses if isinstance(responses, list) else [responses]
+        self.call_count = 0
+    
+    def get(self, *args, **kwargs):
+        response = self.responses[min(self.call_count, len(self.responses) - 1)]
+        self.call_count += 1
+        return response
+    
+    async def __aenter__(self):
+        return self
+    
+    async def __aexit__(self, exc_type, exc, tb):
+        pass
 
 
 class TestUtilityFunctions:
@@ -465,13 +499,10 @@ class TestAPIIntegration:
     @pytest.mark.asyncio
     async def test_buscar_fixture_id_not_found(self):
         """Test buscar_fixture_id returns None when fixture not found."""
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.json = AsyncMock(return_value={"response": []})
+        mock_response = MockResponse(200, {"response": []})
+        mock_session = MockClientSession(mock_response)
         
-        with patch('aiohttp.ClientSession') as mock_session:
-            mock_session.return_value.__aenter__.return_value.get.return_value.__aenter__.return_value = mock_response
-            
+        with patch('aiohttp.ClientSession', return_value=mock_session):
             result = await main.buscar_fixture_id("NonExistent Team x Another Team")
             
             assert result is None
@@ -485,9 +516,7 @@ class TestAPIIntegration:
     @pytest.mark.asyncio
     async def test_buscar_fixture_id_success(self):
         """Test buscar_fixture_id returns fixture ID on success."""
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.json = AsyncMock(return_value={
+        mock_response = MockResponse(200, {
             "response": [{
                 "fixture": {"id": 12345},
                 "teams": {
@@ -496,10 +525,9 @@ class TestAPIIntegration:
                 }
             }]
         })
+        mock_session = MockClientSession(mock_response)
         
-        with patch('aiohttp.ClientSession') as mock_session:
-            mock_session.return_value.__aenter__.return_value.get.return_value.__aenter__.return_value = mock_response
-            
+        with patch('aiohttp.ClientSession', return_value=mock_session):
             result = await main.buscar_fixture_id("Flamengo x Palmeiras")
             
             assert result == 12345
@@ -507,13 +535,10 @@ class TestAPIIntegration:
     @pytest.mark.asyncio
     async def test_buscar_odd_ao_vivo_not_found(self):
         """Test buscar_odd_ao_vivo returns N/D when odd not found."""
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.json = AsyncMock(return_value={"response": []})
+        mock_response = MockResponse(200, {"response": []})
+        mock_session = MockClientSession(mock_response)
         
-        with patch('aiohttp.ClientSession') as mock_session:
-            mock_session.return_value.__aenter__.return_value.get.return_value.__aenter__.return_value = mock_response
-            
+        with patch('aiohttp.ClientSession', return_value=mock_session):
             result = await main.buscar_odd_ao_vivo(12345, 0.5)
             
             assert result == "N/D"
@@ -521,9 +546,7 @@ class TestAPIIntegration:
     @pytest.mark.asyncio
     async def test_buscar_odd_ao_vivo_success(self):
         """Test buscar_odd_ao_vivo returns odd value on success."""
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.json = AsyncMock(return_value={
+        mock_response = MockResponse(200, {
             "response": [{
                 "bookmakers": [{
                     "bets": [{
@@ -536,10 +559,9 @@ class TestAPIIntegration:
                 }]
             }]
         })
+        mock_session = MockClientSession(mock_response)
         
-        with patch('aiohttp.ClientSession') as mock_session:
-            mock_session.return_value.__aenter__.return_value.get.return_value.__aenter__.return_value = mock_response
-            
+        with patch('aiohttp.ClientSession', return_value=mock_session):
             result = await main.buscar_odd_ao_vivo(12345, 0.5)
             
             assert result == "2.05"
@@ -555,9 +577,7 @@ class TestAPIIntegration:
     @pytest.mark.asyncio
     async def test_buscar_odd_pre_live_success(self):
         """Test buscar_odd_pre_live returns odd on success."""
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.json = AsyncMock(return_value={
+        mock_response = MockResponse(200, {
             "response": [{
                 "bookmakers": [{
                     "bets": [{
@@ -570,10 +590,9 @@ class TestAPIIntegration:
                 }]
             }]
         })
+        mock_session = MockClientSession(mock_response)
         
-        with patch('aiohttp.ClientSession') as mock_session:
-            mock_session.return_value.__aenter__.return_value.get.return_value.__aenter__.return_value = mock_response
-            
+        with patch('aiohttp.ClientSession', return_value=mock_session):
             result = await main.buscar_odd_pre_live(12345, 0.5)
             
             assert result.valor == "1.95"
@@ -582,13 +601,11 @@ class TestAPIIntegration:
     @pytest.mark.asyncio
     async def test_buscar_odd_pre_live_fallback_to_live(self):
         """Test buscar_odd_pre_live falls back to live odds."""
-        mock_pre_live_response = AsyncMock()
-        mock_pre_live_response.status = 200
-        mock_pre_live_response.json = AsyncMock(return_value={"response": []})
+        # Mock response for pre-live (empty)
+        mock_pre_live_response = MockResponse(200, {"response": []})
         
-        mock_live_response = AsyncMock()
-        mock_live_response.status = 200
-        mock_live_response.json = AsyncMock(return_value={
+        # Mock response for live odds (has data)
+        mock_live_response = MockResponse(200, {
             "response": [{
                 "bookmakers": [{
                     "bets": [{
@@ -602,17 +619,11 @@ class TestAPIIntegration:
             }]
         })
         
-        with patch('aiohttp.ClientSession') as mock_session:
-            # Setup mock to return different responses for different URLs
-            async def mock_get(url, **kwargs):
-                if 'live' in url:
-                    return mock_live_response
-                return mock_pre_live_response
-            
-            mock_session.return_value.__aenter__.return_value.get = lambda url, **kwargs: mock_get(url, **kwargs).__aenter__()
-            mock_pre_live_response.__aenter__.return_value = mock_pre_live_response
-            mock_live_response.__aenter__.return_value = mock_live_response
-            
+        # Create separate sessions for pre-live and live calls
+        mock_pre_live_session = MockClientSession(mock_pre_live_response)
+        mock_live_session = MockClientSession(mock_live_response)
+        
+        with patch('aiohttp.ClientSession', side_effect=[mock_pre_live_session, mock_live_session]):
             result = await main.buscar_odd_pre_live(12345, 0.5)
             
             assert result.valor == "2.10"
@@ -627,9 +638,7 @@ class TestAPIIntegration:
     @pytest.mark.asyncio
     async def test_verificar_placar_ht_ao_vivo_success(self):
         """Test verificar_placar_ht_ao_vivo returns correct score."""
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.json = AsyncMock(return_value={
+        mock_response = MockResponse(200, {
             "results": 1,
             "response": [{
                 "score": {
@@ -640,10 +649,9 @@ class TestAPIIntegration:
                 }
             }]
         })
+        mock_session = MockClientSession(mock_response)
         
-        with patch('aiohttp.ClientSession') as mock_session:
-            mock_session.return_value.__aenter__.return_value.get.return_value.__aenter__.return_value = mock_response
-            
+        with patch('aiohttp.ClientSession', return_value=mock_session):
             result = await main.verificar_placar_ht_ao_vivo(12345)
             
             assert result == 1
@@ -651,13 +659,10 @@ class TestAPIIntegration:
     @pytest.mark.asyncio
     async def test_verificar_placar_ht_ao_vivo_no_results(self):
         """Test verificar_placar_ht_ao_vivo returns 0 when no results."""
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.json = AsyncMock(return_value={"results": 0})
+        mock_response = MockResponse(200, {"results": 0})
+        mock_session = MockClientSession(mock_response)
         
-        with patch('aiohttp.ClientSession') as mock_session:
-            mock_session.return_value.__aenter__.return_value.get.return_value.__aenter__.return_value = mock_response
-            
+        with patch('aiohttp.ClientSession', return_value=mock_session):
             result = await main.verificar_placar_ht_ao_vivo(12345)
             
             assert result == 0
