@@ -91,6 +91,7 @@ def init_db():
     try:
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(DB_PATH) as conn:
+            # Usamos timestamps UTC em formato TEXT para alinhar com as funções datetime/DATE do SQLite
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS historico_estatisticas (
@@ -166,6 +167,7 @@ def carregar_resumo_recente(time1: str, time2: str) -> Optional[Dict[str, Any]]:
         return None
 
     _, _, t1_norm, t2_norm = _ordenar_dupla(time1, time2)
+    # SQLite datetime('now','utc') usa o formato abaixo; mantemos a mesma assinatura para comparações
     limite = (datetime.now(timezone.utc) - timedelta(days=MAX_CACHE_DIAS)).strftime(
         "%Y-%m-%d %H:%M:%S"
     )
@@ -456,6 +458,7 @@ async def resumo_estatistico(time1: str, time2: str, odd_referencia: Optional[st
             resumo_cache = cache.get("resumo", "")
             odd_salva = cache.get("odd_registrada")
             confrontos_cache = json.loads(cache.get("confrontos_json") or "[]")
+            # Regrava para atualizar timestamp/odd registrados e manter o cache "vivo"
             salvar_resumo_db(
                 time1,
                 time2,

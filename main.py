@@ -70,7 +70,7 @@ def extrair_times(jogo: str) -> list[str]:
     try:
         partes = [p.strip() for p in jogo.split(' x ')]
         return partes if len(partes) == 2 else []
-    except Exception:
+    except (AttributeError, ValueError, TypeError):
         return []
 
 async def buscar_fixture_id(nome_jogo: str) -> int | None:
