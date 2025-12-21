@@ -2,6 +2,7 @@ import os
 import re
 import unicodedata
 import asyncio
+from typing import NamedTuple
 from zoneinfo import ZoneInfo
 import logging
 from datetime import datetime, timedelta
@@ -20,6 +21,7 @@ from estatisticas_time import (
     calcular_bonus_historico,
     metric,
     metrics_snapshot,
+    rotular_odd,
 )
 
 # Configurar logging
@@ -48,6 +50,10 @@ except ValueError as e:
 
 # Inicializar bot
 bot = Bot(token=BOT_TOKEN)
+
+class OddResultado(NamedTuple):
+    valor: str
+    origem: str
 
 ALTA_STAKE = "0.75%"
 MUITO_ALTA_STAKE = "1%"
@@ -103,6 +109,11 @@ def extrair_pais(texto: str) -> str | None:
     except Exception:
         pass
     return None
+
+
+def eh_mercado_primeiro_tempo_over(nome_mercado: str) -> bool:
+    nome = (nome_mercado or "").lower()
+    return ("over" in nome or "total" in nome) and ("half" in nome or "first" in nome or "tempo" in nome)
 
 async def buscar_fixture_id(nome_jogo: str, liga_hint: str | None = None, pais_hint: str | None = None) -> int | None:
     if not nome_jogo or not FOOTBALL_API_KEY:
@@ -287,8 +298,7 @@ async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
                                 if bookmakers:
                                     for bookmaker in bookmakers:
                                         for market in bookmaker.get('bets', []):
-                                            market_name_lower = market.get('name', '').lower()
-                                            if ('over' in market_name_lower or 'total' in market_name_lower) and ('half' in market_name_lower or 'first' in market_name_lower or 'tempo' in market_name_lower):
+                                        if eh_mercado_primeiro_tempo_over(market.get('name', '')):
                                                 logger.info(f"🎯 Mercado HT compatível encontrado: '{market.get('name')}'")
                                                 
                                                 for value in market.get('values', []):
@@ -305,13 +315,77 @@ async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
                             logger.error(f"❌ Erro na API /odds/live: Status {resp_odds.status}")
                 except asyncio.TimeoutError:
                     logger.error("Timeout em /odds/live; nova tentativa em 1s")
-                    logger.info("metrics.odds_retry")
+                    metric("odds_retry")
                     await asyncio.sleep(1)
                     continue
     except Exception as e:
         logger.error(f"❌ Erro crítico em buscar_odd_ao_vivo: {e}")
         
     return odd_encontrada
+
+
+async def buscar_odd_pre_live(fixture_id: int, goal_line: float) -> OddResultado:
+    """
+    Busca odd pré-live para o mercado de primeiro tempo e
+    faz fallback para a odd ao vivo se necessário.
+    Retorno (OddResultado):
+      - valor: odd encontrada ou "N/D"
+      - origem: "pre-live" quando veio do endpoint /odds,
+        "live" quando veio do fallback /odds/live,
+        "unavailable" quando o fixture_id está ausente ou nenhuma odd foi localizada após todas as tentativas
+    """
+    odd_encontrada = "N/D"
+    if not fixture_id:
+        return OddResultado(odd_encontrada, "unavailable")
+
+    goal_line_str = str(goal_line).replace(".0", "")
+    headers = {"x-apisports-key": FOOTBALL_API_KEY}
+    url_odds = "https://v3.football.api-sports.io/odds"
+    params = {"fixture": str(fixture_id)}
+
+    logger.info(f"🔎 Buscando odd PRÉ-LIVE para Over {goal_line} HT no Fixture ID: {fixture_id}")
+
+    try:
+        timeout = aiohttp.ClientTimeout(total=12)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            for tentativa in range(2):
+                try:
+                    async with session.get(url_odds, headers=headers, params=params) as resp_odds:
+                        if resp_odds.status == 200:
+                            data_odds = await resp_odds.json()
+
+                            response_items = data_odds.get("response") or []
+                            if response_items:
+                                fixture_data = response_items[0]
+                                bookmakers = fixture_data.get("bookmakers", [])
+
+                                for bookmaker in bookmakers:
+                                    for market in bookmaker.get("bets", []):
+                                        if eh_mercado_primeiro_tempo_over(market.get("name", "")):
+                                            for value in market.get("values", []):
+                                                value_name = value.get("value", "").lower().replace(",", ".")
+                                                if f"over {goal_line_str}" in value_name:
+                                                    odd_value = value.get("odd")
+                                                    logger.info(f"🎉 ODD PRÉ-LIVE ENCONTRADA (Over {goal_line} HT): {odd_value}")
+                                                    return OddResultado(str(odd_value), "pre-live")
+                            else:
+                                logger.warning(f"⚠️ API /odds não retornou dados para fixture {fixture_id}.")
+                        else:
+                            logger.error(f"❌ Erro na API /odds: Status {resp_odds.status}")
+                except asyncio.TimeoutError:
+                    logger.error("Timeout em /odds; nova tentativa em 1s")
+                    metric("odds_pre_live_retry")
+                    await asyncio.sleep(1)
+                    continue
+    except Exception as e:
+        logger.error(f"❌ Erro crítico em buscar_odd_pre_live: {e}")
+
+    logger.info("⏪ Fallback para odd ao vivo")
+    odd_live = await buscar_odd_ao_vivo(fixture_id, goal_line)
+    if odd_live != "N/D":
+        return OddResultado(odd_live, "live")
+
+    return OddResultado(odd_encontrada, "unavailable")
 
 # --- Verificar Placar HT ao Vivo ---
 async def verificar_placar_ht_ao_vivo(fixture_id: int) -> int | None:
@@ -548,7 +622,8 @@ async def analisar(texto):
 
             goal_line_alvo = (gols_ht_atuais or 0) + 0.5
             mercado_alvo = f"Over {goal_line_alvo} HT"
-            odd_ht = await buscar_odd_ao_vivo(fixture_id, goal_line_alvo)
+            odd_ht, odd_origem = await buscar_odd_pre_live(fixture_id, goal_line_alvo)
+            odd_exibicao = rotular_odd(odd_ht, odd_origem if odd_ht != "N/D" else None)
             resumo_historico = None
             try:
                 partes_jogo = extrair_times(jogo)
@@ -565,7 +640,7 @@ async def analisar(texto):
                 veredito = f"ENTRAR | CONFIANÇA: {confianca}"
             
             historico_bloco = f"\n\n{resumo_historico}" if resumo_historico else ""
-            msg = f"""⚽️ {veredito}\n🏟️ {jogo}\n🤖 OVERBOT ANÁLISE:\n⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} \n🌤️ CLIMA: {resumo_clima}\n📊 ODD ATUAL: *{odd_ht}*\n▶️ ENTRADA: {mercado_alvo}{historico_bloco}"""
+            msg = f"""⚽️ {veredito}\n🏟️ {jogo}\n🤖 OVERBOT ANÁLISE:\n⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} \n🌤️ CLIMA: {resumo_clima}\n📊 ODD: *{odd_exibicao}*\n▶️ ENTRADA: {mercado_alvo}{historico_bloco}"""
             msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg, parse_mode='Markdown')
             logger.info(f"✅ Sinal '{mercado_alvo}' enviado para: {jogo}")
             asyncio.create_task(tarefa_veredito_dinamico_ht(fixture_id, msg_enviada, goal_line_alvo))
