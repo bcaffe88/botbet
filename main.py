@@ -11,6 +11,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
 import aiohttp
 import traceback
+from estatisticas_time import resumo_estatistico
 
 # Configurar logging
 logging.basicConfig(
@@ -405,9 +406,17 @@ async def analisar(texto):
             fixture_id = await buscar_fixture_id(jogo)
             
             if not fixture_id:
+                resumo_historico = None
+                try:
+                    partes_jogo = [p.strip() for p in jogo.split(' x ')]
+                    if len(partes_jogo) == 2:
+                        resumo_historico = await resumo_estatistico(partes_jogo[0], partes_jogo[1])
+                except Exception as hist_error:
+                    logger.error(f"Erro ao obter histórico do confronto: {hist_error}")
                 veredito = f"ENTRAR | CONFIANÇA: {confianca}"
                 odd_ht = "N/D"
-                msg = f"""⚽️ {veredito}\n🏟️ {jogo}\n🤖 OVERBOT ANÁLISE:\n⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} \n🌤️ CLIMA: {resumo_clima}\n📊 ODD ATUAL: *{odd_ht}*\n▶️ ENTRADA: OVER 0.5 HT"""
+                historico_bloco = f"\n\n{resumo_historico}" if resumo_historico else ""
+                msg = f"""⚽️ {veredito}\n🏟️ {jogo}\n🤖 OVERBOT ANÁLISE:\n⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} \n🌤️ CLIMA: {resumo_clima}\n📊 ODD ATUAL: *{odd_ht}*\n▶️ ENTRADA: OVER 0.5 HT{historico_bloco}"""
                 await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg, parse_mode='Markdown')
                 logger.info(f"✅ Sinal enviado para '{jogo}' (sem dados da API).")
                 logger.warning(f"Veredito não agendado para '{jogo}' pois o fixture ID não pôde ser encontrado.")
@@ -423,13 +432,22 @@ async def analisar(texto):
             goal_line_alvo = (gols_ht_atuais or 0) + 0.5
             mercado_alvo = f"Over {goal_line_alvo} HT"
             odd_ht = await buscar_odd_ao_vivo(fixture_id, goal_line_alvo)
+            resumo_historico = None
+            try:
+                partes_jogo = [p.strip() for p in jogo.split(' x ')]
+                if len(partes_jogo) == 2:
+                    odd_ref = odd_ht if odd_ht != "N/D" else None
+                    resumo_historico = await resumo_estatistico(partes_jogo[0], partes_jogo[1], odd_ref)
+            except Exception as hist_error:
+                logger.error(f"Erro ao obter histórico do confronto: {hist_error}")
 
             if gols_ht_atuais is not None and gols_ht_atuais > 0:
                 veredito = f"ENTRADA HT LIMITE | CONFIANÇA: {confianca}"
             else:
                 veredito = f"ENTRAR | CONFIANÇA: {confianca}"
             
-            msg = f"""⚽️ {veredito}\n🏟️ {jogo}\n🤖 OVERBOT ANÁLISE:\n⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} \n🌤️ CLIMA: {resumo_clima}\n📊 ODD ATUAL: *{odd_ht}*\n▶️ ENTRADA: {mercado_alvo}"""
+            historico_bloco = f"\n\n{resumo_historico}" if resumo_historico else ""
+            msg = f"""⚽️ {veredito}\n🏟️ {jogo}\n🤖 OVERBOT ANÁLISE:\n⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} \n🌤️ CLIMA: {resumo_clima}\n📊 ODD ATUAL: *{odd_ht}*\n▶️ ENTRADA: {mercado_alvo}{historico_bloco}"""
             msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg, parse_mode='Markdown')
             logger.info(f"✅ Sinal '{mercado_alvo}' enviado para: {jogo}")
             asyncio.create_task(tarefa_veredito_dinamico_ht(fixture_id, msg_enviada, goal_line_alvo))

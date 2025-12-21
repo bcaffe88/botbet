@@ -1,7 +1,10 @@
 import os
+import json
+import sqlite3
 import asyncio
 import logging
 import unicodedata
+from pathlib import Path
 from difflib import SequenceMatcher
 from datetime import datetime, timedelta
 from typing import Optional, List, Tuple, Dict, Any
@@ -28,6 +31,8 @@ BASE_URL = "https://v3.football.api-sports.io"
 
 # Timeout padrão para requisições
 DEFAULT_TIMEOUT = 15
+DB_PATH = Path(os.getenv("ESTATISTICAS_DB_PATH", "estatisticas.db"))
+MAX_CACHE_DIAS = int(os.getenv("ESTATISTICAS_CACHE_DIAS", "7"))
 
 # Mapeamento manual de nomes comuns para nomes oficiais na API
 NOMES_OFICIAIS = {
@@ -70,6 +75,120 @@ def similaridade(a: str, b: str) -> float:
     except Exception as e:
         logger.error(f"Erro ao calcular similaridade entre '{a}' e '{b}': {e}")
         return 0.0
+
+
+def _ordenar_dupla(time1: str, time2: str) -> Tuple[str, str, str, str]:
+    """Normaliza e ordena os nomes dos times para manter chave determinística"""
+    t1_norm = normalizar(time1)
+    t2_norm = normalizar(time2)
+    if t1_norm <= t2_norm:
+        return time1, time2, t1_norm, t2_norm
+    return time2, time1, t2_norm, t1_norm
+
+
+def init_db():
+    """Inicializa o banco SQLite para armazenar históricos"""
+    try:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS historico_estatisticas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    time1 TEXT NOT NULL,
+                    time2 TEXT NOT NULL,
+                    time1_norm TEXT NOT NULL,
+                    time2_norm TEXT NOT NULL,
+                    resumo TEXT NOT NULL,
+                    gols_1t_time1 INTEGER,
+                    gols_1t_time2 INTEGER,
+                    confrontos_json TEXT,
+                    tendencia TEXT,
+                    odd_registrada TEXT,
+                    data_ref TEXT DEFAULT (DATE('now')),
+                    criado_em TEXT DEFAULT (CURRENT_TIMESTAMP)
+                );
+                """
+            )
+            conn.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_historico_unico
+                ON historico_estatisticas(time1_norm, time2_norm, data_ref);
+                """
+            )
+    except Exception as e:
+        logger.error(f"Erro ao inicializar o banco de dados: {e}")
+
+
+def salvar_resumo_db(
+    time1: str,
+    time2: str,
+    resumo: str,
+    gols_1t_time1: int,
+    gols_1t_time2: int,
+    confrontos: List[str],
+    tendencia: str,
+    odd_referencia: Optional[str] = None,
+):
+    """Persiste o resumo estatístico para uso futuro"""
+    try:
+        init_db()
+        time1_ord, time2_ord, t1_norm, t2_norm = _ordenar_dupla(time1, time2)
+        confrontos_json = json.dumps(confrontos or [])
+
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO historico_estatisticas
+                (time1, time2, time1_norm, time2_norm, resumo, gols_1t_time1, gols_1t_time2, confrontos_json, tendencia, odd_registrada, data_ref)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE('now'));
+                """,
+                (
+                    time1_ord,
+                    time2_ord,
+                    t1_norm,
+                    t2_norm,
+                    resumo,
+                    gols_1t_time1,
+                    gols_1t_time2,
+                    confrontos_json,
+                    tendencia,
+                    odd_referencia,
+                ),
+            )
+    except Exception as e:
+        logger.error(f"Erro ao salvar resumo no banco de dados: {e}")
+
+
+def carregar_resumo_recente(time1: str, time2: str) -> Optional[Dict[str, Any]]:
+    """Recupera resumo recente salvo no banco para evitar chamadas repetidas à API"""
+    if not DB_PATH.exists():
+        return None
+
+    _, _, t1_norm, t2_norm = _ordenar_dupla(time1, time2)
+    limite = (datetime.utcnow() - timedelta(days=MAX_CACHE_DIAS)).isoformat()
+
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                """
+                SELECT resumo, confrontos_json, tendencia, odd_registrada, gols_1t_time1, gols_1t_time2, criado_em
+                FROM historico_estatisticas
+                WHERE time1_norm = ? AND time2_norm = ? AND datetime(criado_em) >= ?
+                ORDER BY datetime(criado_em) DESC
+                LIMIT 1;
+                """,
+                (t1_norm, t2_norm, limite),
+            ).fetchone()
+
+        if row:
+            logger.info("♻️ Resumo estatístico recuperado do banco local")
+            return dict(row)
+    except Exception as e:
+        logger.error(f"Erro ao carregar resumo do banco: {e}")
+
+    return None
 
 async def fazer_requisicao_api(url: str, params: Dict[str, Any] = None, retries: int = 3) -> Optional[Dict[str, Any]]:
     """Função genérica para fazer requisições à API Football com retry"""
@@ -325,10 +444,28 @@ async def confrontos_diretos(team1_id: int, team2_id: int, num_jogos: int = 5) -
     
     return confrontos
 
-async def resumo_estatistico(time1: str, time2: str) -> str:
-    """Gera um resumo estatístico completo do confronto entre dois times"""
+async def resumo_estatistico(time1: str, time2: str, odd_referencia: Optional[str] = None) -> str:
+    """Gera e persiste um resumo estatístico completo do confronto entre dois times"""
     try:
         logger.info(f"📊 Gerando resumo estatístico: {time1} vs {time2}")
+
+        cache = carregar_resumo_recente(time1, time2)
+        if cache:
+            resumo_cache = cache.get("resumo", "")
+            odd_salva = cache.get("odd_registrada")
+            if odd_referencia and odd_referencia != odd_salva:
+                confrontos_cache = json.loads(cache.get("confrontos_json") or "[]")
+                salvar_resumo_db(
+                    time1,
+                    time2,
+                    resumo_cache,
+                    cache.get("gols_1t_time1") or 0,
+                    cache.get("gols_1t_time2") or 0,
+                    confrontos_cache,
+                    cache.get("tendencia") or "",
+                    odd_referencia,
+                )
+            return resumo_cache
         
         # Buscar IDs dos times
         team1_id = await buscar_team_id(time1)
@@ -373,6 +510,16 @@ async def resumo_estatistico(time1: str, time2: str) -> str:
             tendencia = "🔴 BAIXA probabilidade de gol no 1ºT"
         
         resumo += f"\n\n🎯 ANÁLISE: {tendencia}"
+        salvar_resumo_db(
+            time1,
+            time2,
+            resumo,
+            gols_1t_time1,
+            gols_1t_time2,
+            confrontos,
+            tendencia,
+            odd_referencia,
+        )
         
         logger.info(f"✅ Resumo estatístico gerado com sucesso")
         return resumo
