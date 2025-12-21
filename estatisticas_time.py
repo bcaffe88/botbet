@@ -33,6 +33,7 @@ BASE_URL = "https://v3.football.api-sports.io"
 DEFAULT_TIMEOUT = 15
 DB_PATH = Path(os.getenv("ESTATISTICAS_DB_PATH", "estatisticas.db"))
 MAX_CACHE_DIAS = int(os.getenv("ESTATISTICAS_CACHE_DIAS", "7"))
+ISO_TS_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 # Mapeamento manual de nomes comuns para nomes oficiais na API
 NOMES_OFICIAIS = {
@@ -105,7 +106,7 @@ def init_db():
                     gols_1t_time2 INTEGER,
                     confrontos_json TEXT,
                     tendencia TEXT,
-                    odd_registrada TEXT,
+                    odd_registrada TEXT DEFAULT '',
                     data_ref TEXT DEFAULT (strftime('%Y-%m-%d','now','utc')),
                     criado_em TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now','utc'))
                 );
@@ -136,6 +137,7 @@ def salvar_resumo_db(
         init_db()
         time1_ord, time2_ord, t1_norm, t2_norm = _ordenar_dupla(time1, time2)
         confrontos_json = json.dumps(confrontos or [])
+        odd_valor = odd_referencia or ""
 
         with sqlite3.connect(DB_PATH) as conn:
             conn.execute(
@@ -154,7 +156,7 @@ def salvar_resumo_db(
                     gols_1t_time2,
                     confrontos_json,
                     tendencia,
-                    odd_referencia,
+                    odd_valor,
                 ),
             )
     except Exception as e:
@@ -458,17 +460,32 @@ async def resumo_estatistico(time1: str, time2: str, odd_referencia: Optional[st
             resumo_cache = cache.get("resumo", "")
             odd_salva = cache.get("odd_registrada")
             confrontos_cache = json.loads(cache.get("confrontos_json") or "[]")
-            # Regrava para atualizar timestamp/odd registrados e manter o cache "vivo"
-            salvar_resumo_db(
-                time1,
-                time2,
-                resumo_cache,
-                cache.get("gols_1t_time1") or 0,
-                cache.get("gols_1t_time2") or 0,
-                confrontos_cache,
-                cache.get("tendencia") or "",
-                odd_referencia or odd_salva,
-            )
+            precisa_refrescar = False
+            if odd_referencia and odd_referencia != odd_salva:
+                precisa_refrescar = True
+
+            criado_str = cache.get("criado_em")
+            if criado_str:
+                try:
+                    criado_dt = datetime.fromisoformat(criado_str.replace("Z", "+00:00"))
+                    if datetime.now(timezone.utc) - criado_dt > timedelta(days=MAX_CACHE_DIAS / 2):
+                        precisa_refrescar = True
+                except ValueError:
+                    precisa_refrescar = True
+            else:
+                precisa_refrescar = True
+
+            if precisa_refrescar:
+                salvar_resumo_db(
+                    time1,
+                    time2,
+                    resumo_cache,
+                    cache.get("gols_1t_time1") or 0,
+                    cache.get("gols_1t_time2") or 0,
+                    confrontos_cache,
+                    cache.get("tendencia") or "",
+                    odd_referencia or odd_salva,
+                )
             return resumo_cache
         
         # Buscar IDs dos times
