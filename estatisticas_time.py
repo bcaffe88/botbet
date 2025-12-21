@@ -8,6 +8,7 @@ from difflib import SequenceMatcher
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Tuple, Dict, Any
 import aiohttp
+from collections import Counter
 
 try:
     import psycopg2
@@ -20,6 +21,21 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+_metrics = Counter()
+
+
+def metric(nome: str):
+    """Incrementa contador de métrica e loga com prefixo metrics."""
+    _metrics[nome] += 1
+    logger.info(f"metrics.{nome}")
+
+
+def metrics_snapshot(reset: bool = False) -> dict:
+    """Retorna snapshot simples das métricas registradas."""
+    snap = dict(_metrics)
+    if reset:
+        _metrics.clear()
+    return snap
 
 # Configurações da API
 API_FOOTBALL_KEY = os.getenv("FOOTBALL_API_KEY")
@@ -254,7 +270,7 @@ def atualizar_fixture_resultado(fixture_id: Optional[int], gols_ht: Optional[int
                 """,
                 (gols_ht, gols_ft, resultado, data_jogo, fixture_id),
             )
-            logger.info("metrics.result_updated")
+            metric("result_updated")
     except Exception as e:
         logger.error(f"Erro ao atualizar fixture: {e}")
 
@@ -278,12 +294,12 @@ def obter_metricas_historicas(time1: str, time2: str, max_rows: int = 10) -> Tup
             )
             rows = cur.fetchall()
         if not rows:
-            logger.info("metrics.hist_empty")
+            metric("hist_empty")
             return 0.0, None
         com_gol = sum(1 for r in rows if r[0] and r[0] > 0)
         perc = com_gol / len(rows)
         last_result = rows[0][1]
-        logger.info("metrics.hist_available")
+        metric("hist_available")
         return perc, last_result
     except Exception as e:
         logger.error(f"Erro ao obter métricas históricas: {e}")
@@ -313,9 +329,9 @@ def carregar_resumo_recente(time1: str, time2: str) -> Optional[Dict[str, Any]]:
             row = cur.fetchone()
             if row:
                 keys = ["resumo", "confrontos_json", "tendencia", "odd_registrada", "gols_1t_time1", "gols_1t_time2", "criado_em"]
-                logger.info("metrics.cache_hit")
+                metric("cache_hit")
                 return dict(zip(keys, row))
-            logger.info("metrics.cache_miss")
+            metric("cache_miss")
     except Exception as e:
         logger.error(f"Erro ao carregar resumo do banco: {e}")
 

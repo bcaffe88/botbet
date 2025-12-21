@@ -11,7 +11,14 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
 import aiohttp
 import traceback
-from estatisticas_time import resumo_estatistico, salvar_fixture_pendente, atualizar_fixture_resultado, obter_metricas_historicas
+from estatisticas_time import (
+    resumo_estatistico,
+    salvar_fixture_pendente,
+    atualizar_fixture_resultado,
+    obter_metricas_historicas,
+    metric,
+    metrics_snapshot,
+)
 
 # Configurar logging
 logging.basicConfig(
@@ -153,7 +160,7 @@ async def buscar_fixture_id(nome_jogo: str, liga_hint: str | None = None, pais_h
                                 fixture_id = melhor_match.get("fixture", {}).get("id")
                                 api_name = f"{melhor_match['teams']['home']['name']} x {melhor_match['teams']['away']['name']}"
                                 logger.info(f"✅ Fixture encontrado para '{nome_jogo}' ≈ '{api_name}': ID {fixture_id} (Similaridade: {maior_similaridade:.2f})")
-                                logger.info("metrics.fixture_found")
+                                metric("fixture_found")
                                 return fixture_id
                             else:
                                 logger.warning(f"  ❌ Primeira busca falhou. Nenhuma similaridade > {maior_similaridade} encontrada.")
@@ -385,6 +392,10 @@ async def tarefa_veredito_dinamico_ht(fixture_id, msg_original, goal_line):
         logger.error(f"❌ [Over {goal_line} HT] Erro crítico na tarefa de veredito: {e}")
         resultado_final = "⏳ ERRO AO VERIFICAR"
     finally:
+        try:
+            logger.info(f"metrics.summary {metrics_snapshot()}")
+        except Exception:
+            pass
         if not asyncio.current_task().cancelled():
             novo_texto = f"{msg_original.text}\n\n───────────────\n{resultado_final}"
             try:
