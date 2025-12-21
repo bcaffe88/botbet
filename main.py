@@ -77,76 +77,76 @@ async def buscar_fixture_id(nome_jogo: str) -> int | None:
     if not nome_jogo or not FOOTBALL_API_KEY:
         return None
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
-    data_hoje = datetime.now(OPERATING_TZ).strftime("%Y-%m-%d")
-    url_fixtures = f"https://v3.football.api-sports.io/fixtures?date={data_hoje}"
-    
-    logger.info(f"🔎 Buscando fixture para '{nome_jogo}' em TODOS os jogos da data: {data_hoje}")
-    
+    base_data = datetime.now(OPERATING_TZ)
+    datas_busca = [base_data.strftime("%Y-%m-%d"), (base_data + timedelta(days=1)).strftime("%Y-%m-%d")]
     fixture_id = None
     try:
         timeout = aiohttp.ClientTimeout(total=25)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url_fixtures, headers=headers) as resp:
-                if resp.status != 200:
-                    logger.error(f"Erro ao buscar fixtures: Status {resp.status}")
-                    return None
-                
-                data = await resp.json()
-                jogos = data.get("response", [])
-                logger.info(f"API retornou {len(jogos)} jogos para o dia. Comparando nomes...")
-
-                melhor_match = None
-                maior_similaridade = 0.75
-
-                # Primeira tentativa: busca exata por similaridade de nome completo
-                logger.info("  1️⃣ Tentando busca por similaridade de nome completo...")
-                for item in jogos:
-                    teams = item.get("teams", {})
-                    casa = teams.get("home", {}).get("name", "")
-                    fora = teams.get("away", {}).get("name", "")
-                    nome_match_api = f"{casa} x {fora}"
+            for data_alvo in datas_busca:
+                url_fixtures = f"https://v3.football.api-sports.io/fixtures?date={data_alvo}"
+                logger.info(f"🔎 Buscando fixture para '{nome_jogo}' em TODOS os jogos da data: {data_alvo}")
+                async with session.get(url_fixtures, headers=headers) as resp:
+                    if resp.status != 200:
+                        logger.error(f"Erro ao buscar fixtures: Status {resp.status}")
+                        continue
                     
-                    sim = similaridade(nome_jogo, nome_match_api)
-                    if sim > maior_similaridade:
-                        maior_similaridade = sim
-                        melhor_match = item
-                
-                if melhor_match:
-                    fixture_id = melhor_match.get("fixture", {}).get("id")
-                    api_name = f"{melhor_match['teams']['home']['name']} x {melhor_match['teams']['away']['name']}"
-                    logger.info(f"✅ Fixture encontrado para '{nome_jogo}' ≈ '{api_name}': ID {fixture_id} (Similaridade: {maior_similaridade:.2f})")
-                    return fixture_id
-                else:
-                    logger.warning(f"  ❌ Primeira busca falhou. Nenhuma similaridade > {maior_similaridade} encontrada.")
-                
-                # Segunda tentativa: busca flexível por palavras-chave
-                logger.info("  2️⃣ Tentando busca flexível por palavras-chave...")
-                try:
-                    time_casa_sinal, time_fora_sinal = nome_jogo.split(' x ')
-                    palavras_casa = set(normalizar(time_casa_sinal).split())
-                    palavras_fora = set(normalizar(time_fora_sinal).split())
+                    data = await resp.json()
+                    jogos = data.get("response", [])
+                    logger.info(f"API retornou {len(jogos)} jogos para o dia. Comparando nomes...")
 
+                    melhor_match = None
+                    maior_similaridade = 0.72
+
+                    # Primeira tentativa: busca exata por similaridade de nome completo
+                    logger.info("  1️⃣ Tentando busca por similaridade de nome completo...")
                     for item in jogos:
                         teams = item.get("teams", {})
-                        casa_api = teams.get("home", {}).get("name", "")
-                        fora_api = teams.get("away", {}).get("name", "")
+                        casa = teams.get("home", {}).get("name", "")
+                        fora = teams.get("away", {}).get("name", "")
+                        nome_match_api = f"{casa} x {fora}"
                         
-                        palavras_casa_api = set(normalizar(casa_api).split())
-                        palavras_fora_api = set(normalizar(fora_api).split())
-                        
-                        match_casa = len(palavras_casa.intersection(palavras_casa_api)) / len(palavras_casa) if palavras_casa else 0
-                        match_fora = len(palavras_fora.intersection(palavras_fora_api)) / len(palavras_fora) if palavras_fora else 0
-
-                        if match_casa > 0.5 and match_fora > 0.5:
-                            fixture_id = item.get("fixture", {}).get("id")
-                            api_name = f"{casa_api} x {fora_api}"
-                            logger.info(f"✅ Fixture encontrado com busca flexível: '{nome_jogo}' ≈ '{api_name}': ID {fixture_id}")
-                            return fixture_id
-                except ValueError:
-                    logger.warning("  ❌ Não foi possível dividir o nome do jogo para a busca flexível.")
+                        sim = similaridade(nome_jogo, nome_match_api)
+                        if sim > maior_similaridade:
+                            maior_similaridade = sim
+                            melhor_match = item
                     
-                logger.error(f"❌ Fixture não localizado para '{nome_jogo}' após todas as tentativas.")
-                return None
+                    if melhor_match:
+                        fixture_id = melhor_match.get("fixture", {}).get("id")
+                        api_name = f"{melhor_match['teams']['home']['name']} x {melhor_match['teams']['away']['name']}"
+                        logger.info(f"✅ Fixture encontrado para '{nome_jogo}' ≈ '{api_name}': ID {fixture_id} (Similaridade: {maior_similaridade:.2f})")
+                        return fixture_id
+                    else:
+                        logger.warning(f"  ❌ Primeira busca falhou. Nenhuma similaridade > {maior_similaridade} encontrada.")
+                    
+                    # Segunda tentativa: busca flexível por palavras-chave
+                    logger.info("  2️⃣ Tentando busca flexível por palavras-chave...")
+                    try:
+                        time_casa_sinal, time_fora_sinal = nome_jogo.split(' x ')
+                        palavras_casa = set(normalizar(time_casa_sinal).split())
+                        palavras_fora = set(normalizar(time_fora_sinal).split())
+
+                        for item in jogos:
+                            teams = item.get("teams", {})
+                            casa_api = teams.get("home", {}).get("name", "")
+                            fora_api = teams.get("away", {}).get("name", "")
+                            
+                            palavras_casa_api = set(normalizar(casa_api).split())
+                            palavras_fora_api = set(normalizar(fora_api).split())
+                            
+                            match_casa = len(palavras_casa.intersection(palavras_casa_api)) / len(palavras_casa) if palavras_casa else 0
+                            match_fora = len(palavras_fora.intersection(palavras_fora_api)) / len(palavras_fora) if palavras_fora else 0
+
+                            if match_casa > 0.5 and match_fora > 0.5:
+                                fixture_id = item.get("fixture", {}).get("id")
+                                api_name = f"{casa_api} x {fora_api}"
+                                logger.info(f"✅ Fixture encontrado com busca flexível: '{nome_jogo}' ≈ '{api_name}': ID {fixture_id}")
+                                return fixture_id
+                    except ValueError:
+                        logger.warning("  ❌ Não foi possível dividir o nome do jogo para a busca flexível.")
+                        
+            logger.error(f"❌ Fixture não localizado para '{nome_jogo}' após todas as tentativas.")
+            return None
     
     except asyncio.TimeoutError:
         logger.error("Timeout ao baixar a lista de jogos do dia. A resposta pode ser muito grande.")
