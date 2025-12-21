@@ -195,50 +195,27 @@ def salvar_resumo_db(
 
         with _get_conn() as conn:
             cur = conn.cursor()
-            if usar_postgres():
-                cur.execute(
-                    """
-                    INSERT INTO historico_resumos
-                    (time1, time2, time1_norm, time2_norm, resumo, gols_1t_time1, gols_1t_time2, confrontos_json, tendencia, odd_registrada, data_ref, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_DATE, NOW(), NOW())
-                    ON CONFLICT (time1_norm, time2_norm, data_ref, odd_registrada)
-                    DO UPDATE SET resumo=EXCLUDED.resumo, gols_1t_time1=EXCLUDED.gols_1t_time1, gols_1t_time2=EXCLUDED.gols_1t_time2, confrontos_json=EXCLUDED.confrontos_json, tendencia=EXCLUDED.tendencia, updated_at=NOW();
-                    """,
-                    (
-                        time1_ord,
-                        time2_ord,
-                        t1_norm,
-                        t2_norm,
-                        resumo,
-                        gols_1t_time1,
-                        gols_1t_time2,
-                        confrontos_json,
-                        tendencia,
-                        odd_valor,
-                    ),
-                )
-            else:
-                cur.execute(
-                    """
-                    INSERT OR REPLACE INTO historico_resumos
-                    (time1, time2, time1_norm, time2_norm, resumo, gols_1t_time1, gols_1t_time2, confrontos_json, tendencia, odd_registrada, data_ref, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d','now','utc'), strftime('%Y-%m-%dT%H:%M:%SZ','now','utc'));
-                    """,
-                    (
-                        time1_ord,
-                        time2_ord,
-                        t1_norm,
-                        t2_norm,
-                        resumo,
-                        gols_1t_time1,
-                        gols_1t_time2,
-                        confrontos_json,
-                        tendencia,
-                        odd_valor,
-                    ),
-                )
-            if not usar_postgres():
-                conn.commit()
+            cur.execute(
+                """
+                INSERT INTO historico_resumos
+                (time1, time2, time1_norm, time2_norm, resumo, gols_1t_time1, gols_1t_time2, confrontos_json, tendencia, odd_registrada, data_ref, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_DATE, NOW(), NOW())
+                ON CONFLICT (time1_norm, time2_norm, data_ref, odd_registrada)
+                DO UPDATE SET resumo=EXCLUDED.resumo, gols_1t_time1=EXCLUDED.gols_1t_time1, gols_1t_time2=EXCLUDED.gols_1t_time2, confrontos_json=EXCLUDED.confrontos_json, tendencia=EXCLUDED.tendencia, updated_at=NOW();
+                """,
+                (
+                    time1_ord,
+                    time2_ord,
+                    t1_norm,
+                    t2_norm,
+                    resumo,
+                    gols_1t_time1,
+                    gols_1t_time2,
+                    confrontos_json,
+                    tendencia,
+                    odd_valor,
+                ),
+            )
     except Exception as e:
         logger.error(f"Erro ao salvar resumo no banco de dados: {e}")
 
@@ -253,7 +230,7 @@ def salvar_fixture_pendente(time1: str, time2: str, fixture_id: Optional[int], o
                 """
                 INSERT INTO fixtures_cache (fixture_id, time1, time2, time1_norm, time2_norm, odd_referencia, status, data_jogo, created_at, updated_at)
                 VALUES (%s, %s, %s, %s, %s, %s, 'PENDENTE', %s, NOW(), NOW())
-                ON CONFLICT (fixture_id) DO UPDATE SET odd_referencia = EXCLUDED.odd_referencia, updated_at = NOW(), status = 'PENDENTE';
+                ON CONFLICT (fixture_id) DO UPDATE SET odd_referencia = EXCLUDED.odd_referencia, data_jogo = COALESCE(EXCLUDED.data_jogo, fixtures_cache.data_jogo), updated_at = NOW(), status = 'PENDENTE';
                 """,
                 (fixture_id, time1_ord, time2_ord, t1_norm, t2_norm, odd_referencia, data_jogo),
             )
@@ -300,6 +277,7 @@ def obter_metricas_historicas(time1: str, time2: str, max_rows: int = 10) -> Tup
             )
             rows = cur.fetchall()
         if not rows:
+            logger.info("metrics.hist_empty")
             return 0.0, None
         com_gol = sum(1 for r in rows if r[0] and r[0] > 0)
         perc = com_gol / len(rows)
@@ -334,6 +312,7 @@ def carregar_resumo_recente(time1: str, time2: str) -> Optional[Dict[str, Any]]:
             if row:
                 keys = ["resumo", "confrontos_json", "tendencia", "odd_registrada", "gols_1t_time1", "gols_1t_time2", "criado_em"]
                 return dict(zip(keys, row))
+            logger.info("metrics.cache_miss")
     except Exception as e:
         logger.error(f"Erro ao carregar resumo do banco: {e}")
 
