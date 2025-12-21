@@ -6,7 +6,7 @@ Conteúdo fornecido pelo cliente para integração neste repositório.
 import os
 import json
 import requests
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template_string
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 
@@ -30,6 +30,15 @@ STRIPE_LINK_OFERTA_VITALICIO = os.getenv("STRIPE_LINK_OFERTA_VITALICIO")
 app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
+
+
+def ensure_tables():
+    try:
+        with app.app_context():
+            db.create_all()
+            print("✅ Tabelas verificadas/criadas no banco")
+    except Exception as e:
+        print(f"❌ Erro ao criar/verificar tabelas: {e}")
 
 # Controle de tarefas em segundo plano
 task_control = {"last_run": None}
@@ -368,7 +377,84 @@ def health_check():
         return jsonify(status="error_in_tasks", error=str(e)), 500
 
 
+@app.before_request
+def _bootstrap_tables():
+    if not task_control.get("last_run"):
+        ensure_tables()
+        task_control["last_run"] = task_control.get("last_run")
+
+
+LANDING_TEMPLATE = """
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OverBot VIP</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin:0; padding:0; background:#0b132b; color:#f5f7fa; }
+    header { padding:32px; text-align:center; background:#1c2541; }
+    h1 { margin:0 0 8px; }
+    p { margin:0; }
+    section { padding:32px 20px; max-width:960px; margin:0 auto; }
+    .cards { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:16px; }
+    .card { background:#1c2541; padding:20px; border-radius:12px; border:1px solid #243b53; }
+    .btn { display:inline-block; padding:10px 16px; background:#ff7e67; color:#fff; text-decoration:none; border-radius:8px; font-weight:bold; }
+    footer { text-align:center; padding:24px; color:#9fb3c8; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>OverBot VIP</h1>
+    <p>Previsão de gols no 1º tempo com inteligência de dados e triagem automatizada.</p>
+    <p><strong>Canal:</strong> {{ channel or 'configurar CHANNEL_ID' }}</p>
+  </header>
+
+  <section id="planos">
+    <h2>Planos</h2>
+    <div class="cards">
+      <div class="card">
+        <h3>Teste de Batalha</h3>
+        <p>3 dias de acesso para validar o arsenal.</p>
+        <p><strong>Ative via /start no bot</strong></p>
+      </div>
+      <div class="card">
+        <h3>Mensal</h3>
+        <p>Acesso contínuo ao fluxo de inteligência.</p>
+        <p><strong>Link:</strong> {{ link_mensal or 'configure STRIPE_LINK_MENSAL' }}</p>
+      </div>
+      <div class="card">
+        <h3>Vitalício</h3>
+        <p>Acesso permanente para operadores da elite.</p>
+        <p><strong>Link:</strong> {{ link_vitalicio or 'configure STRIPE_LINK_VITALICIO' }}</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="contato">
+    <h2>Contato</h2>
+    <p>Suporte via Telegram: <a class="btn" href="https://t.me/{{ botadmin or 'botadmin' }}" target="_blank">Abrir botadmin</a></p>
+  </section>
+
+  <footer>
+    <p>OverBot VIP — overbotvip.up.railway.app</p>
+  </footer>
+</body>
+</html>
+"""
+
+
+@app.route("/", methods=["GET"])
+def landing_page():
+    return render_template_string(
+        LANDING_TEMPLATE,
+        channel=CHANNEL_ID,
+        link_mensal=STRIPE_LINK_MENSAL,
+        link_vitalicio=STRIPE_LINK_VITALICIO,
+        botadmin="botadmin",
+    )
+
+
 if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
+    ensure_tables()
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
