@@ -106,8 +106,8 @@ def init_db():
                     confrontos_json TEXT,
                     tendencia TEXT,
                     odd_registrada TEXT,
-                    data_ref TEXT DEFAULT (DATE('now','utc')),
-                    criado_em TEXT DEFAULT (datetime('now','utc'))
+                    data_ref TEXT DEFAULT (strftime('%Y-%m-%d','now','utc')),
+                    criado_em TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now','utc'))
                 );
                 """
             )
@@ -142,7 +142,7 @@ def salvar_resumo_db(
                 """
                 INSERT OR REPLACE INTO historico_estatisticas
                 (time1, time2, time1_norm, time2_norm, resumo, gols_1t_time1, gols_1t_time2, confrontos_json, tendencia, odd_registrada, data_ref)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE('now','utc'));
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d','now','utc'));
                 """,
                 (
                     time1_ord,
@@ -169,7 +169,7 @@ def carregar_resumo_recente(time1: str, time2: str) -> Optional[Dict[str, Any]]:
     _, _, t1_norm, t2_norm = _ordenar_dupla(time1, time2)
     # SQLite datetime('now','utc') usa o formato abaixo; mantemos a mesma assinatura para comparações
     limite = (datetime.now(timezone.utc) - timedelta(days=MAX_CACHE_DIAS)).strftime(
-        "%Y-%m-%d %H:%M:%S"
+        "%Y-%m-%dT%H:%M:%SZ"
     )
 
     try:
