@@ -66,6 +66,13 @@ def similaridade(a, b):
     if not a or not b: return 0.0
     return SequenceMatcher(None, normalizar(a), normalizar(b)).ratio()
 
+def extrair_times(jogo: str) -> list[str]:
+    try:
+        partes = [p.strip() for p in jogo.split(' x ')]
+        return partes if len(partes) == 2 else []
+    except Exception:
+        return []
+
 async def buscar_fixture_id(nome_jogo: str) -> int | None:
     if not nome_jogo or not FOOTBALL_API_KEY:
         return None
@@ -408,7 +415,7 @@ async def analisar(texto):
             if not fixture_id:
                 resumo_historico = None
                 try:
-                    partes_jogo = [p.strip() for p in jogo.split(' x ')]
+                    partes_jogo = extrair_times(jogo)
                     if len(partes_jogo) == 2:
                         resumo_historico = await resumo_estatistico(partes_jogo[0], partes_jogo[1])
                 except Exception as hist_error:
@@ -434,7 +441,7 @@ async def analisar(texto):
             odd_ht = await buscar_odd_ao_vivo(fixture_id, goal_line_alvo)
             resumo_historico = None
             try:
-                partes_jogo = [p.strip() for p in jogo.split(' x ')]
+                partes_jogo = extrair_times(jogo)
                 if len(partes_jogo) == 2:
                     odd_ref = odd_ht if odd_ht != "N/D" else None
                     resumo_historico = await resumo_estatistico(partes_jogo[0], partes_jogo[1], odd_ref)

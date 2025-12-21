@@ -6,7 +6,7 @@ import logging
 import unicodedata
 from pathlib import Path
 from difflib import SequenceMatcher
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Tuple, Dict, Any
 import aiohttp
 
@@ -105,15 +105,15 @@ def init_db():
                     confrontos_json TEXT,
                     tendencia TEXT,
                     odd_registrada TEXT,
-                    data_ref TEXT DEFAULT (DATE('now')),
-                    criado_em TEXT DEFAULT (CURRENT_TIMESTAMP)
+                    data_ref TEXT DEFAULT (DATE('now','utc')),
+                    criado_em TEXT DEFAULT (datetime('now','utc'))
                 );
                 """
             )
             conn.execute(
                 """
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_historico_unico
-                ON historico_estatisticas(time1_norm, time2_norm, data_ref);
+                ON historico_estatisticas(time1_norm, time2_norm, data_ref, odd_registrada);
                 """
             )
     except Exception as e:
@@ -141,7 +141,7 @@ def salvar_resumo_db(
                 """
                 INSERT OR REPLACE INTO historico_estatisticas
                 (time1, time2, time1_norm, time2_norm, resumo, gols_1t_time1, gols_1t_time2, confrontos_json, tendencia, odd_registrada, data_ref)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE('now'));
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE('now','utc'));
                 """,
                 (
                     time1_ord,
@@ -166,7 +166,9 @@ def carregar_resumo_recente(time1: str, time2: str) -> Optional[Dict[str, Any]]:
         return None
 
     _, _, t1_norm, t2_norm = _ordenar_dupla(time1, time2)
-    limite = (datetime.utcnow() - timedelta(days=MAX_CACHE_DIAS)).isoformat()
+    limite = (datetime.now(timezone.utc) - timedelta(days=MAX_CACHE_DIAS)).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
 
     try:
         with sqlite3.connect(DB_PATH) as conn:
@@ -453,18 +455,17 @@ async def resumo_estatistico(time1: str, time2: str, odd_referencia: Optional[st
         if cache:
             resumo_cache = cache.get("resumo", "")
             odd_salva = cache.get("odd_registrada")
-            if odd_referencia and odd_referencia != odd_salva:
-                confrontos_cache = json.loads(cache.get("confrontos_json") or "[]")
-                salvar_resumo_db(
-                    time1,
-                    time2,
-                    resumo_cache,
-                    cache.get("gols_1t_time1") or 0,
-                    cache.get("gols_1t_time2") or 0,
-                    confrontos_cache,
-                    cache.get("tendencia") or "",
-                    odd_referencia,
-                )
+            confrontos_cache = json.loads(cache.get("confrontos_json") or "[]")
+            salvar_resumo_db(
+                time1,
+                time2,
+                resumo_cache,
+                cache.get("gols_1t_time1") or 0,
+                cache.get("gols_1t_time2") or 0,
+                confrontos_cache,
+                cache.get("tendencia") or "",
+                odd_referencia or odd_salva,
+            )
             return resumo_cache
         
         # Buscar IDs dos times
