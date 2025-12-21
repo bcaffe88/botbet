@@ -305,6 +305,31 @@ def obter_metricas_historicas(time1: str, time2: str, max_rows: int = 10) -> Tup
         logger.error(f"Erro ao obter métricas históricas: {e}")
         return 0.0, None
 
+
+def calcular_bonus_historico(
+    perc_hist: float,
+    ultimo_res: Optional[str],
+    bonus_high: float,
+    bonus_med: float,
+    penalty_red: float,
+) -> Tuple[float, List[str]]:
+    """Calcula bônus/penalidade histórica de forma pura para testes."""
+    bonus = 0.0
+    criterios: List[str] = []
+
+    if perc_hist >= bonus_high:
+        bonus += 1
+        criterios.append("Histórico próprio favorável")
+    elif perc_hist >= bonus_med:
+        bonus += 0.5
+        criterios.append("Histórico próprio moderado")
+
+    if ultimo_res and "RED" in ultimo_res:
+        bonus -= penalty_red
+        criterios.append("Alerta RED recente")
+
+    return bonus, criterios
+
 def carregar_resumo_recente(time1: str, time2: str) -> Optional[Dict[str, Any]]:
     """Recupera resumo recente salvo no banco para evitar chamadas repetidas à API"""
     _, _, t1_norm, t2_norm = _ordenar_dupla(time1, time2)

@@ -17,6 +17,7 @@ from estatisticas_time import (
     salvar_fixture_pendente,
     atualizar_fixture_resultado,
     obter_metricas_historicas,
+    calcular_bonus_historico,
     metric,
     metrics_snapshot,
 )
@@ -486,21 +487,19 @@ async def analisar(texto):
             pontos_tecnicos += 1
         
         pontos_total = pontos_tecnicos + pontos_clima
-        bonus_hist = 0.0
         nomes_times = extrair_times(jogo)
         if len(nomes_times) == 2:
             perc_hist, ultimo_res = obter_metricas_historicas(nomes_times[0], nomes_times[1])
-            if perc_hist >= HIST_BONUS_HIGH:
-                bonus_hist += 1
-                criterios_tecnicos.append("Histórico próprio favorável")
-            elif perc_hist >= HIST_BONUS_MED:
-                bonus_hist += 0.5
-                criterios_tecnicos.append("Histórico próprio moderado")
-            if ultimo_res and "RED" in ultimo_res:
-                bonus_hist -= HIST_PENALTY_RED
-                criterios_tecnicos.append("Alerta RED recente")
-        pontos_total += bonus_hist
-        
+            bonus_hist, criterios_hist = calcular_bonus_historico(
+                perc_hist,
+                ultimo_res,
+                HIST_BONUS_HIGH,
+                HIST_BONUS_MED,
+                HIST_PENALTY_RED,
+            )
+            criterios_tecnicos.extend(criterios_hist)
+            pontos_total += bonus_hist
+
         logger.info(f"📈 Pontos Técnicos: {pontos_tecnicos}/10 | 🌤️ Pontos Clima: {pontos_clima}/4 | 🎯 Total: {pontos_total}")
 
         # SOMENTE CONFIANÇA ALTA (>= 10 pontos)
