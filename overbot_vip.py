@@ -385,61 +385,104 @@ def _bootstrap_tables():
 
 
 LANDING_TEMPLATE = """
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OverBot VIP</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin:0; padding:0; background:#0b132b; color:#f5f7fa; }
-    header { padding:32px; text-align:center; background:#1c2541; }
-    h1 { margin:0 0 8px; }
-    p { margin:0; }
-    section { padding:32px 20px; max-width:960px; margin:0 auto; }
-    .cards { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:16px; }
-    .card { background:#1c2541; padding:20px; border-radius:12px; border:1px solid #243b53; }
-    .btn { display:inline-block; padding:10px 16px; background:#ff7e67; color:#fff; text-decoration:none; border-radius:8px; font-weight:bold; }
-    footer { text-align:center; padding:24px; color:#9fb3c8; }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>OverBot VIP</h1>
-    <p>Previsão de gols no 1º tempo com inteligência de dados e triagem automatizada.</p>
-    <p><strong>Canal:</strong> {{ channel or 'configurar CHANNEL_ID' }}</p>
-  </header>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OverBot VIP — Inteligência de gols HT</title>
+    <style>
+      :root {
+        --bg: #070914;
+        --panel: #0c1224;
+        --border: #1e293b;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --accent: #22c55e;
+        --accent-2: #3b82f6;
+      }
+      body { font-family: 'Inter', Arial, sans-serif; margin: 0; color: var(--text); background: var(--bg); }
+      .hero { padding: 80px 20px 64px; text-align: center; background: radial-gradient(circle at 15% 20%, rgba(34,197,94,0.18), transparent 28%), radial-gradient(circle at 80% 10%, rgba(59,130,246,0.20), transparent 32%), var(--bg); }
+      .hero h1 { font-size: 2.6rem; margin: 0 0 14px; }
+      .hero p { margin: 0 auto 26px; max-width: 760px; line-height: 1.7; color: #cbd5e1; }
+      .badge { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #0b1021; font-weight: 800; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.4px; }
+      .cta { display: inline-block; margin-top: 14px; padding: 14px 18px; border-radius: 12px; background: var(--accent); color: #0b1021; font-weight: 800; text-decoration: none; box-shadow: 0 14px 34px rgba(34,197,94,0.28); }
+      .section { padding: 60px 20px; max-width: 1100px; margin: 0 auto; }
+      .section h2 { margin: 0 0 12px; text-align: center; }
+      .section p.lead { text-align: center; margin: 0 auto 32px; max-width: 760px; color: #cbd5e1; }
+      .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+      .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; color: var(--text); box-shadow: 0 10px 28px rgba(0,0,0,0.28); }
+      .card h3 { margin: 0 0 10px; font-size: 1.25rem; }
+      .card p { margin: 0 0 12px; color: #cbd5e1; line-height: 1.6; }
+      .price { font-size: 1.4rem; font-weight: 800; color: var(--accent); }
+      ul.features { list-style: none; padding: 0; margin: 12px 0 0; color: #cbd5e1; }
+      ul.features li { margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+      .footer { text-align: center; padding: 30px 20px; color: var(--muted); background: var(--bg); border-top: 1px solid var(--border); }
+      a.btn { display: inline-block; padding: 12px 14px; margin-top: 10px; background: var(--accent-2); color: white; border-radius: 10px; text-decoration: none; font-weight: 700; }
+      @media (max-width: 480px) { .hero h1 { font-size: 1.9rem; } }
+    </style>
+  </head>
+  <body>
+    <header class="hero">
+      <div class="badge">Primeiro tempo • Over 0.5</div>
+      <h1>OverBot VIP — inteligência para gols no 1º tempo</h1>
+      <p>Operações guiadas por leitura de padrões e odds pré-live, entregues em tempo real. Menos feeling, mais método.</p>
+      <a class="cta" href="#planos">Ver planos</a>
+    </header>
 
-  <section id="planos">
-    <h2>Planos</h2>
-    <div class="cards">
-      <div class="card">
-        <h3>Teste de Batalha</h3>
-        <p>3 dias de acesso para validar o arsenal.</p>
-        <p><strong>Ative via /start no bot</strong></p>
+    <section class="section" id="planos">
+      <h2>Planos para operar com disciplina</h2>
+      <p class="lead">Escolha o acesso que melhor se encaixa na sua estratégia. Links configuráveis via Stripe.</p>
+      <div class="cards">
+        <div class="card">
+          <h3>Teste de Batalha (3 dias)</h3>
+          <p>Valide o fluxo de leitura antes de escalar.</p>
+          <ul class="features">
+            <li>⚡ Sinais de over 0.5 HT</li>
+            <li>📊 Canal de operações</li>
+            <li>🛠️ Triagem automática</li>
+          </ul>
+          <p class="price">R$ 0</p>
+          <p><strong>Ative via /start no bot</strong></p>
+        </div>
+        <div class="card">
+          <h3>Mensal</h3>
+          <p>Acesso contínuo ao fluxo de inteligência e gestão.</p>
+          <ul class="features">
+            <li>🔁 Atualizações diárias</li>
+            <li>🧠 Leitura pré-live + refinamento</li>
+            <li>🎯 Estatísticas e histórico</li>
+          </ul>
+          <p class="price">R$ 29,87</p>
+          <p><strong>Link:</strong> {{ link_mensal or 'configure STRIPE_LINK_MENSAL' }}</p>
+        </div>
+        <div class="card">
+          <h3>Vitalício</h3>
+          <p>Acesso permanente para operadores da elite.</p>
+          <ul class="features">
+            <li>🚀 Suporte prioritário</li>
+            <li>📈 Atualizações futuras</li>
+            <li>♾️ Sem mensalidades</li>
+          </ul>
+          <p class="price">R$ 197,87</p>
+          <p><strong>Link:</strong> {{ link_vitalicio or 'configure STRIPE_LINK_VITALICIO' }}</p>
+        </div>
       </div>
-      <div class="card">
-        <h3>Mensal</h3>
-        <p>Acesso contínuo ao fluxo de inteligência.</p>
-        <p><strong>Link:</strong> {{ link_mensal or 'configure STRIPE_LINK_MENSAL' }}</p>
-      </div>
-      <div class="card">
-        <h3>Vitalício</h3>
-        <p>Acesso permanente para operadores da elite.</p>
-        <p><strong>Link:</strong> {{ link_vitalicio or 'configure STRIPE_LINK_VITALICIO' }}</p>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <section id="contato">
-    <h2>Contato</h2>
-    <p>Suporte via Telegram: <a class="btn" href="https://t.me/{{ botadmin or 'botadmin' }}" target="_blank">Abrir botadmin</a></p>
-  </section>
+    <section class="section" id="contato">
+      <h2>Fale com o botadmin</h2>
+      <p class="lead">Tire dúvidas, libere acesso e acompanhe suporte direto no Telegram.</p>
+      <p style="text-align:center;">
+        <a class="btn" href="https://t.me/{{ botadmin or 'botadmin' }}" target="_blank">Abrir botadmin</a>
+      </p>
+      <p style="text-align:center; color: var(--muted);">Canal principal: {{ channel or 'configurar CHANNEL_ID_ADMIN' }}</p>
+    </section>
 
-  <footer>
-    <p>OverBot VIP — overbotvip.up.railway.app</p>
-  </footer>
-</body>
+    <footer class="footer">
+      <p>OverBot VIP — overbotvip.up.railway.app</p>
+    </footer>
+  </body>
 </html>
 """
 
