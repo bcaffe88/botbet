@@ -4,13 +4,23 @@ import unicodedata
 import asyncio
 from zoneinfo import ZoneInfo
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
 import aiohttp
 import traceback
+from keep_alive import keep_alive
+from estatisticas_time import (
+    resumo_estatistico,
+    salvar_fixture_pendente,
+    atualizar_fixture_resultado,
+    obter_metricas_historicas,
+    calcular_bonus_historico,
+    metric,
+    metrics_snapshot,
+)
 
 # Configurar logging
 logging.basicConfig(
@@ -45,6 +55,9 @@ VERY_HIGH_CONFIDENCE_THRESHOLD = 12
 OPERATING_START_HOUR = 8   # 08:00 local time
 OPERATING_END_HOUR = 0     # 00:00 local time (next day boundary)
 OPERATING_TZ = ZoneInfo("America/Sao_Paulo")
+HIST_BONUS_HIGH = float(os.getenv("HIST_BONUS_HIGH", "0.65"))
+HIST_BONUS_MED = float(os.getenv("HIST_BONUS_MED", "0.50"))
+HIST_PENALTY_RED = float(os.getenv("HIST_PENALTY_RED", "0.50"))
 CONFIDENCE_MAP = {
     "ALTA": f"ALTA ✅ STAKE {ALTA_STAKE}",
     "MUITO ALTA": f"MUITO ALTA ✅✅ STAKE {MUITO_ALTA_STAKE}"
@@ -65,80 +78,130 @@ def similaridade(a, b):
     if not a or not b: return 0.0
     return SequenceMatcher(None, normalizar(a), normalizar(b)).ratio()
 
-async def buscar_fixture_id(nome_jogo: str) -> int | None:
+def extrair_times(jogo: str) -> list[str]:
+    try:
+        partes = re.split(r"\s*(?:x|vs\.?|VS|v\.?|-|/)\s*", jogo, flags=re.IGNORECASE)
+        partes = [p.strip() for p in partes if p.strip()]
+        return partes if len(partes) == 2 else []
+    except (AttributeError, ValueError, TypeError):
+        return []
+
+def extrair_liga(texto: str) -> str | None:
+    try:
+        m = re.search(r"liga[:\-]\s*(.+)", texto, flags=re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+    except Exception:
+        pass
+    return None
+
+def extrair_pais(texto: str) -> str | None:
+    try:
+        m = re.search(r"pa[ií]s[:\-]\s*(.+)", texto, flags=re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+    except Exception:
+        pass
+    return None
+
+async def buscar_fixture_id(nome_jogo: str, liga_hint: str | None = None, pais_hint: str | None = None) -> int | None:
     if not nome_jogo or not FOOTBALL_API_KEY:
         return None
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
-    data_hoje = datetime.now(OPERATING_TZ).strftime("%Y-%m-%d")
-    url_fixtures = f"https://v3.football.api-sports.io/fixtures?date={data_hoje}"
-    
-    logger.info(f"🔎 Buscando fixture para '{nome_jogo}' em TODOS os jogos da data: {data_hoje}")
-    
+    base_data = datetime.now(OPERATING_TZ)
+    datas_busca = [base_data.strftime("%Y-%m-%d"), (base_data + timedelta(days=1)).strftime("%Y-%m-%d")]
     fixture_id = None
     try:
-        timeout = aiohttp.ClientTimeout(total=25)
+        timeout = aiohttp.ClientTimeout(total=15)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url_fixtures, headers=headers) as resp:
-                if resp.status != 200:
-                    logger.error(f"Erro ao buscar fixtures: Status {resp.status}")
-                    return None
-                
-                data = await resp.json()
-                jogos = data.get("response", [])
-                logger.info(f"API retornou {len(jogos)} jogos para o dia. Comparando nomes...")
+            for data_alvo in datas_busca:
+                for tentativa in range(2):
+                    url_fixtures = f"https://v3.football.api-sports.io/fixtures?date={data_alvo}"
+                    logger.info(f"🔎 Buscando fixture para '{nome_jogo}' em TODOS os jogos da data: {data_alvo} (tentativa {tentativa+1})")
+                    try:
+                        async with session.get(url_fixtures, headers=headers) as resp:
+                            if resp.status != 200:
+                                logger.error(f"Erro ao buscar fixtures: Status {resp.status}")
+                                continue
+                            
+                            data = await resp.json()
+                            jogos = data.get("response", [])
+                            logger.info(f"API retornou {len(jogos)} jogos para o dia. Comparando nomes...")
 
-                melhor_match = None
-                maior_similaridade = 0.75
+                            # Se temos pista de liga/país, filtrar por similaridade
+                            if liga_hint or pais_hint:
+                                jogos_filtrados = []
+                                for j in jogos:
+                                    liga_nome = j.get("league", {}).get("name", "")
+                                    pais_nome = j.get("league", {}).get("country", "")
+                                    liga_ok = similaridade(liga_hint, liga_nome) >= 0.5 if liga_hint else True
+                                    pais_ok = similaridade(pais_hint, pais_nome) >= 0.5 if pais_hint else True
+                                    if liga_ok and pais_ok:
+                                        jogos_filtrados.append(j)
+                                if jogos_filtrados:
+                                    jogos = jogos_filtrados
+                                    logger.info(f"Filtro por liga/pais aplicado: {len(jogos)} jogos restantes")
 
-                # Primeira tentativa: busca exata por similaridade de nome completo
-                logger.info("  1️⃣ Tentando busca por similaridade de nome completo...")
-                for item in jogos:
-                    teams = item.get("teams", {})
-                    casa = teams.get("home", {}).get("name", "")
-                    fora = teams.get("away", {}).get("name", "")
-                    nome_match_api = f"{casa} x {fora}"
-                    
-                    sim = similaridade(nome_jogo, nome_match_api)
-                    if sim > maior_similaridade:
-                        maior_similaridade = sim
-                        melhor_match = item
-                
-                if melhor_match:
-                    fixture_id = melhor_match.get("fixture", {}).get("id")
-                    api_name = f"{melhor_match['teams']['home']['name']} x {melhor_match['teams']['away']['name']}"
-                    logger.info(f"✅ Fixture encontrado para '{nome_jogo}' ≈ '{api_name}': ID {fixture_id} (Similaridade: {maior_similaridade:.2f})")
-                    return fixture_id
-                else:
-                    logger.warning(f"  ❌ Primeira busca falhou. Nenhuma similaridade > {maior_similaridade} encontrada.")
-                
-                # Segunda tentativa: busca flexível por palavras-chave
-                logger.info("  2️⃣ Tentando busca flexível por palavras-chave...")
-                try:
-                    time_casa_sinal, time_fora_sinal = nome_jogo.split(' x ')
-                    palavras_casa = set(normalizar(time_casa_sinal).split())
-                    palavras_fora = set(normalizar(time_fora_sinal).split())
+                            melhor_match = None
+                            maior_similaridade = 0.72
 
-                    for item in jogos:
-                        teams = item.get("teams", {})
-                        casa_api = teams.get("home", {}).get("name", "")
-                        fora_api = teams.get("away", {}).get("name", "")
+                            # Primeira tentativa: busca exata por similaridade de nome completo
+                            logger.info("  1️⃣ Tentando busca por similaridade de nome completo...")
+                            for item in jogos:
+                                teams = item.get("teams", {})
+                                casa = teams.get("home", {}).get("name", "")
+                                fora = teams.get("away", {}).get("name", "")
+                                nome_match_api = f"{casa} x {fora}"
+                                
+                                sim = similaridade(nome_jogo, nome_match_api)
+                                if sim > maior_similaridade:
+                                    maior_similaridade = sim
+                                    melhor_match = item
+                            
+                            if melhor_match:
+                                fixture_id = melhor_match.get("fixture", {}).get("id")
+                                api_name = f"{melhor_match['teams']['home']['name']} x {melhor_match['teams']['away']['name']}"
+                                logger.info(f"✅ Fixture encontrado para '{nome_jogo}' ≈ '{api_name}': ID {fixture_id} (Similaridade: {maior_similaridade:.2f})")
+                                metric("fixture_found")
+                                return fixture_id
+                            else:
+                                logger.warning(f"  ❌ Primeira busca falhou. Nenhuma similaridade > {maior_similaridade} encontrada.")
+                            
+                            # Segunda tentativa: busca flexível por palavras-chave
+                            logger.info("  2️⃣ Tentando busca flexível por palavras-chave...")
+                            try:
+                                partes = extrair_times(nome_jogo)
+                                if len(partes) == 2:
+                                    time_casa_sinal, time_fora_sinal = partes
+                                    palavras_casa = set(normalizar(time_casa_sinal).split())
+                                    palavras_fora = set(normalizar(time_fora_sinal).split())
+
+                                    for item in jogos:
+                                        teams = item.get("teams", {})
+                                        casa_api = teams.get("home", {}).get("name", "")
+                                        fora_api = teams.get("away", {}).get("name", "")
+                                        
+                                        palavras_casa_api = set(normalizar(casa_api).split())
+                                        palavras_fora_api = set(normalizar(fora_api).split())
+                                        
+                                        match_casa = len(palavras_casa.intersection(palavras_casa_api)) / len(palavras_casa) if palavras_casa else 0
+                                        match_fora = len(palavras_fora.intersection(palavras_fora_api)) / len(palavras_fora) if palavras_fora else 0
+
+                                        if match_casa > 0.5 and match_fora > 0.5:
+                                            fixture_id = item.get("fixture", {}).get("id")
+                                            api_name = f"{casa_api} x {fora_api}"
+                                            logger.info(f"✅ Fixture encontrado com busca flexível: '{nome_jogo}' ≈ '{api_name}': ID {fixture_id}")
+                                            return fixture_id
+                            except ValueError:
+                                logger.warning("  ❌ Não foi possível dividir o nome do jogo para a busca flexível.")
+                    except asyncio.TimeoutError:
+                        logger.error("Timeout ao baixar fixtures; tentando novamente.")
+                        logger.info("metrics.fixture_retry")
+                        await asyncio.sleep(1)
+                        continue
                         
-                        palavras_casa_api = set(normalizar(casa_api).split())
-                        palavras_fora_api = set(normalizar(fora_api).split())
-                        
-                        match_casa = len(palavras_casa.intersection(palavras_casa_api)) / len(palavras_casa) if palavras_casa else 0
-                        match_fora = len(palavras_fora.intersection(palavras_fora_api)) / len(palavras_fora) if palavras_fora else 0
-
-                        if match_casa > 0.5 and match_fora > 0.5:
-                            fixture_id = item.get("fixture", {}).get("id")
-                            api_name = f"{casa_api} x {fora_api}"
-                            logger.info(f"✅ Fixture encontrado com busca flexível: '{nome_jogo}' ≈ '{api_name}': ID {fixture_id}")
-                            return fixture_id
-                except ValueError:
-                    logger.warning("  ❌ Não foi possível dividir o nome do jogo para a busca flexível.")
-                    
-                logger.error(f"❌ Fixture não localizado para '{nome_jogo}' após todas as tentativas.")
-                return None
+            logger.error(f"❌ Fixture não localizado para '{nome_jogo}' após todas as tentativas.")
+            return None
     
     except asyncio.TimeoutError:
         logger.error("Timeout ao baixar a lista de jogos do dia. A resposta pode ser muito grande.")
@@ -209,34 +272,42 @@ async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
     logger.info(f"🔎 Buscando odd AO VIVO para Over {goal_line} HT no Fixture ID: {fixture_id}")
     
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url_odds, headers=headers, params=params) as resp_odds:
-                if resp_odds.status == 200:
-                    data_odds = await resp_odds.json()
-                    
-                    if data_odds.get('response'):
-                        fixture_data = data_odds['response'][0]
-                        bookmakers = fixture_data.get('bookmakers', [])
-                        
-                        if bookmakers:
-                            for bookmaker in bookmakers:
-                                for market in bookmaker.get('bets', []):
-                                    market_name_lower = market.get('name', '').lower()
-                                    if ('over' in market_name_lower or 'total' in market_name_lower) and ('half' in market_name_lower or 'first' in market_name_lower or 'tempo' in market_name_lower):
-                                        logger.info(f"🎯 Mercado HT compatível encontrado: '{market.get('name')}'")
-                                        
-                                        for value in market.get('values', []):
-                                            value_name = value.get('value', '').lower().replace(',', '.')
-                                            if f'over {goal_line_str}' in value_name:
-                                                odd_value = value.get('odd')
-                                                logger.info(f"🎉 ODD AO VIVO ENCONTRADA (Over {goal_line} HT): {odd_value}")
-                                                return str(odd_value)
-                        
-                        logger.warning(f"⚠️ Odd 'Over {goal_line} HT' não encontrada nos mercados.")
-                    else:
-                        logger.warning(f"⚠️ API /odds/live não retornou dados para fixture {fixture_id}.")
-                else:
-                    logger.error(f"❌ Erro na API /odds/live: Status {resp_odds.status}")
+        timeout = aiohttp.ClientTimeout(total=12)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            for tentativa in range(2):
+                try:
+                    async with session.get(url_odds, headers=headers, params=params) as resp_odds:
+                        if resp_odds.status == 200:
+                            data_odds = await resp_odds.json()
+                            
+                            if data_odds.get('response'):
+                                fixture_data = data_odds['response'][0]
+                                bookmakers = fixture_data.get('bookmakers', [])
+                                
+                                if bookmakers:
+                                    for bookmaker in bookmakers:
+                                        for market in bookmaker.get('bets', []):
+                                            market_name_lower = market.get('name', '').lower()
+                                            if ('over' in market_name_lower or 'total' in market_name_lower) and ('half' in market_name_lower or 'first' in market_name_lower or 'tempo' in market_name_lower):
+                                                logger.info(f"🎯 Mercado HT compatível encontrado: '{market.get('name')}'")
+                                                
+                                                for value in market.get('values', []):
+                                                    value_name = value.get('value', '').lower().replace(',', '.')
+                                                    if f'over {goal_line_str}' in value_name:
+                                                        odd_value = value.get('odd')
+                                                        logger.info(f"🎉 ODD AO VIVO ENCONTRADA (Over {goal_line} HT): {odd_value}")
+                                                        return str(odd_value)
+                                
+                                logger.warning(f"⚠️ Odd 'Over {goal_line} HT' não encontrada nos mercados.")
+                            else:
+                                logger.warning(f"⚠️ API /odds/live não retornou dados para fixture {fixture_id}.")
+                        else:
+                            logger.error(f"❌ Erro na API /odds/live: Status {resp_odds.status}")
+                except asyncio.TimeoutError:
+                    logger.error("Timeout em /odds/live; nova tentativa em 1s")
+                    logger.info("metrics.odds_retry")
+                    await asyncio.sleep(1)
+                    continue
     except Exception as e:
         logger.error(f"❌ Erro crítico em buscar_odd_ao_vivo: {e}")
         
@@ -250,22 +321,30 @@ async def verificar_placar_ht_ao_vivo(fixture_id: int) -> int | None:
     url = f"https://v3.football.api-sports.io/fixtures?id={fixture_id}"
     logger.info(f"🔎 Verificando placar ao vivo para fixture ID: {fixture_id}")
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    if data.get('results', 0) > 0:
-                        fixture = data['response'][0]
-                        gols_casa = fixture.get('score', {}).get('halftime', {}).get('home', 0)
-                        gols_fora = fixture.get('score', {}).get('halftime', {}).get('away', 0)
-                        total_gols = gols_casa + gols_fora
-                        logger.info(f"✅ Placar HT atual: {total_gols} gols.")
-                        return total_gols
-                    else:
-                        logger.warning(f"⚠️ Placar HT indisponível na API. Assumindo 0 gols.")
-                        return 0
-                else:
-                    logger.error(f"❌ Erro ao verificar placar: Status {resp.status}")
+        timeout = aiohttp.ClientTimeout(total=12)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            for tentativa in range(2):
+                try:
+                    async with session.get(url, headers=headers) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            if data.get('results', 0) > 0:
+                                fixture = data['response'][0]
+                                gols_casa = fixture.get('score', {}).get('halftime', {}).get('home', 0)
+                                gols_fora = fixture.get('score', {}).get('halftime', {}).get('away', 0)
+                                total_gols = gols_casa + gols_fora
+                                logger.info(f"✅ Placar HT atual: {total_gols} gols.")
+                                return total_gols
+                            else:
+                                logger.warning(f"⚠️ Placar HT indisponível na API. Assumindo 0 gols.")
+                                return 0
+                        else:
+                            logger.error(f"❌ Erro ao verificar placar: Status {resp.status}")
+                except asyncio.TimeoutError:
+                    logger.error("Timeout em /fixtures (placar); nova tentativa em 1s")
+                    logger.info("metrics.fixture_retry")
+                    await asyncio.sleep(1)
+                    continue
     except Exception as e:
         logger.error(f"❌ Erro crítico ao verificar placar: {e}")
     return None
@@ -285,11 +364,25 @@ async def tarefa_veredito_dinamico_ht(fixture_id, msg_original, goal_line):
                     data = await resp.json()
                     if data.get('results', 0) > 0:
                         fixture = data['response'][0]
+                        data_jogo = fixture.get('fixture', {}).get('date')
                         gols_casa_ht = fixture.get('score', {}).get('halftime', {}).get('home', 0)
                         gols_fora_ht = fixture.get('score', {}).get('halftime', {}).get('away', 0)
                         
                         gols_ht = gols_casa_ht + gols_fora_ht
+                        gols_casa_ft = fixture.get('score', {}).get('fulltime', {}).get('home')
+                        gols_fora_ft = fixture.get('score', {}).get('fulltime', {}).get('away')
+                        total_ft = (gols_casa_ft or 0) + (gols_fora_ft or 0)
                         resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅" if gols_ht > goal_line else "R E D ❌"
+                        try:
+                            atualizar_fixture_resultado(
+                                fixture_id,
+                                gols_ht,
+                                total_ft if total_ft else None,
+                                resultado_final,
+                                data_jogo,
+                            )
+                        except Exception as persist_err:
+                            logger.error(f"Erro ao persistir resultado final: {persist_err}")
                     else:
                         logger.warning(f"⚠️ [Over {goal_line} HT] API não retornou dados para fixture.")
                 else:
@@ -301,6 +394,10 @@ async def tarefa_veredito_dinamico_ht(fixture_id, msg_original, goal_line):
         logger.error(f"❌ [Over {goal_line} HT] Erro crítico na tarefa de veredito: {e}")
         resultado_final = "⏳ ERRO AO VERIFICAR"
     finally:
+        try:
+            logger.info(f"metrics.summary {metrics_snapshot()}")
+        except Exception:
+            pass
         if not asyncio.current_task().cancelled():
             novo_texto = f"{msg_original.text}\n\n───────────────\n{resultado_final}"
             try:
@@ -390,7 +487,19 @@ async def analisar(texto):
             pontos_tecnicos += 1
         
         pontos_total = pontos_tecnicos + pontos_clima
-        
+        nomes_times = extrair_times(jogo)
+        if len(nomes_times) == 2:
+            perc_hist, ultimo_res = obter_metricas_historicas(nomes_times[0], nomes_times[1])
+            bonus_hist, criterios_hist = calcular_bonus_historico(
+                perc_hist,
+                ultimo_res,
+                HIST_BONUS_HIGH,
+                HIST_BONUS_MED,
+                HIST_PENALTY_RED,
+            )
+            criterios_tecnicos.extend(criterios_hist)
+            pontos_total += bonus_hist
+
         logger.info(f"📈 Pontos Técnicos: {pontos_tecnicos}/10 | 🌤️ Pontos Clima: {pontos_clima}/4 | 🎯 Total: {pontos_total}")
 
         # SOMENTE CONFIANÇA ALTA (>= 10 pontos)
@@ -402,16 +511,33 @@ async def analisar(texto):
             resumo_clima = f" {status_clima} ({pontos_clima}/4pts)"
             resumo_tecnico = f" {pontos_tecnicos}/10pts"
 
-            fixture_id = await buscar_fixture_id(jogo)
+            liga_hint = extrair_liga(texto)
+            pais_hint = extrair_pais(texto)
+            fixture_id = await buscar_fixture_id(jogo, liga_hint, pais_hint)
             
             if not fixture_id:
+                resumo_historico = None
+                try:
+                    partes_jogo = extrair_times(jogo)
+                    if len(partes_jogo) == 2:
+                        resumo_historico = await resumo_estatistico(partes_jogo[0], partes_jogo[1])
+                except Exception as hist_error:
+                    logger.error(f"Erro ao obter histórico do confronto: {hist_error}")
                 veredito = f"ENTRAR | CONFIANÇA: {confianca}"
                 odd_ht = "N/D"
-                msg = f"""⚽️ {veredito}\n🏟️ {jogo}\n🤖 OVERBOT ANÁLISE:\n⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} \n🌤️ CLIMA: {resumo_clima}\n📊 ODD ATUAL: *{odd_ht}*\n▶️ ENTRADA: OVER 0.5 HT"""
+                historico_bloco = f"\n\n{resumo_historico}" if resumo_historico else ""
+                msg = f"""⚽️ {veredito}\n🏟️ {jogo}\n🤖 OVERBOT ANÁLISE:\n⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} \n🌤️ CLIMA: {resumo_clima}\n📊 ODD ATUAL: *{odd_ht}*\n▶️ ENTRADA: OVER 0.5 HT{historico_bloco}"""
                 await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg, parse_mode='Markdown')
                 logger.info(f"✅ Sinal enviado para '{jogo}' (sem dados da API).")
                 logger.warning(f"Veredito não agendado para '{jogo}' pois o fixture ID não pôde ser encontrado.")
                 return
+            else:
+                try:
+                    partes_jogo = extrair_times(jogo)
+                    if len(partes_jogo) == 2:
+                        salvar_fixture_pendente(partes_jogo[0], partes_jogo[1], fixture_id, None, None)
+                except Exception as persist_err:
+                    logger.error(f"Erro ao salvar fixture pendente: {persist_err}")
 
             gols_ht_atuais = await verificar_placar_ht_ao_vivo(fixture_id)
 
@@ -423,13 +549,23 @@ async def analisar(texto):
             goal_line_alvo = (gols_ht_atuais or 0) + 0.5
             mercado_alvo = f"Over {goal_line_alvo} HT"
             odd_ht = await buscar_odd_ao_vivo(fixture_id, goal_line_alvo)
+            resumo_historico = None
+            try:
+                partes_jogo = extrair_times(jogo)
+                if len(partes_jogo) == 2:
+                    odd_ref = odd_ht if odd_ht != "N/D" else None
+                    salvar_fixture_pendente(partes_jogo[0], partes_jogo[1], fixture_id, odd_ref, None)
+                    resumo_historico = await resumo_estatistico(partes_jogo[0], partes_jogo[1], odd_ref)
+            except Exception as hist_error:
+                logger.error(f"Erro ao obter histórico do confronto: {hist_error}")
 
             if gols_ht_atuais is not None and gols_ht_atuais > 0:
                 veredito = f"ENTRADA HT LIMITE | CONFIANÇA: {confianca}"
             else:
                 veredito = f"ENTRAR | CONFIANÇA: {confianca}"
             
-            msg = f"""⚽️ {veredito}\n🏟️ {jogo}\n🤖 OVERBOT ANÁLISE:\n⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} \n🌤️ CLIMA: {resumo_clima}\n📊 ODD ATUAL: *{odd_ht}*\n▶️ ENTRADA: {mercado_alvo}"""
+            historico_bloco = f"\n\n{resumo_historico}" if resumo_historico else ""
+            msg = f"""⚽️ {veredito}\n🏟️ {jogo}\n🤖 OVERBOT ANÁLISE:\n⚽ CRITÉRIOS ATENDIDOS: {resumo_tecnico} \n🌤️ CLIMA: {resumo_clima}\n📊 ODD ATUAL: *{odd_ht}*\n▶️ ENTRADA: {mercado_alvo}{historico_bloco}"""
             msg_enviada = await bot.send_message(chat_id=CHAT_ID_DESTINO, text=msg, parse_mode='Markdown')
             logger.info(f"✅ Sinal '{mercado_alvo}' enviado para: {jogo}")
             asyncio.create_task(tarefa_veredito_dinamico_ht(fixture_id, msg_enviada, goal_line_alvo))
@@ -466,6 +602,11 @@ async def main():
         logger.info("🚀 Iniciando Bot Over HT - Apenas Confiança ALTA")
         logger.info(f"📍 Monitorando chat: {CHAT_ID_SINAL}")
         logger.info(f"📍 Enviando para: {CHAT_ID_DESTINO}")
+        try:
+            keep_alive()
+            logger.info("🌐 Endpoint /metrics iniciado")
+        except Exception as ka_err:
+            logger.error(f"Falha ao iniciar keep_alive/metrics: {ka_err}")
         
         app = ApplicationBuilder().token(BOT_TOKEN).build()
         app.add_handler(CommandHandler("start", start_command))
