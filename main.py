@@ -86,7 +86,16 @@ def extrair_liga(texto: str) -> str | None:
         pass
     return None
 
-async def buscar_fixture_id(nome_jogo: str, liga_hint: str | None = None) -> int | None:
+def extrair_pais(texto: str) -> str | None:
+    try:
+        m = re.search(r"pa[ií]s[:\-]\s*(.+)", texto, flags=re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+    except Exception:
+        pass
+    return None
+
+async def buscar_fixture_id(nome_jogo: str, liga_hint: str | None = None, pais_hint: str | None = None) -> int | None:
     if not nome_jogo or not FOOTBALL_API_KEY:
         return None
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
@@ -110,16 +119,19 @@ async def buscar_fixture_id(nome_jogo: str, liga_hint: str | None = None) -> int
                             jogos = data.get("response", [])
                             logger.info(f"API retornou {len(jogos)} jogos para o dia. Comparando nomes...")
 
-                            # Se temos pista de liga, filtrar por similaridade de liga
-                            if liga_hint:
+                            # Se temos pista de liga/país, filtrar por similaridade
+                            if liga_hint or pais_hint:
                                 jogos_filtrados = []
                                 for j in jogos:
                                     liga_nome = j.get("league", {}).get("name", "")
-                                    if similaridade(liga_hint, liga_nome) >= 0.5:
+                                    pais_nome = j.get("league", {}).get("country", "")
+                                    liga_ok = similaridade(liga_hint, liga_nome) >= 0.5 if liga_hint else True
+                                    pais_ok = similaridade(pais_hint, pais_nome) >= 0.5 if pais_hint else True
+                                    if liga_ok and pais_ok:
                                         jogos_filtrados.append(j)
                                 if jogos_filtrados:
                                     jogos = jogos_filtrados
-                                    logger.info(f"Filtro por liga '{liga_hint}' aplicado: {len(jogos)} jogos restantes")
+                                    logger.info(f"Filtro por liga/pais aplicado: {len(jogos)} jogos restantes")
 
                             melhor_match = None
                             maior_similaridade = 0.72
@@ -174,6 +186,7 @@ async def buscar_fixture_id(nome_jogo: str, liga_hint: str | None = None) -> int
                                 logger.warning("  ❌ Não foi possível dividir o nome do jogo para a busca flexível.")
                     except asyncio.TimeoutError:
                         logger.error("Timeout ao baixar fixtures; tentando novamente.")
+                        logger.info("metrics.fixture_retry")
                         await asyncio.sleep(1)
                         continue
                         
@@ -282,6 +295,7 @@ async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
                             logger.error(f"❌ Erro na API /odds/live: Status {resp_odds.status}")
                 except asyncio.TimeoutError:
                     logger.error("Timeout em /odds/live; nova tentativa em 1s")
+                    logger.info("metrics.odds_retry")
                     await asyncio.sleep(1)
                     continue
     except Exception as e:
@@ -318,6 +332,7 @@ async def verificar_placar_ht_ao_vivo(fixture_id: int) -> int | None:
                             logger.error(f"❌ Erro ao verificar placar: Status {resp.status}")
                 except asyncio.TimeoutError:
                     logger.error("Timeout em /fixtures (placar); nova tentativa em 1s")
+                    logger.info("metrics.fixture_retry")
                     await asyncio.sleep(1)
                     continue
     except Exception as e:
@@ -485,7 +500,8 @@ async def analisar(texto):
             resumo_tecnico = f" {pontos_tecnicos}/10pts"
 
             liga_hint = extrair_liga(texto)
-            fixture_id = await buscar_fixture_id(jogo, liga_hint)
+            pais_hint = extrair_pais(texto)
+            fixture_id = await buscar_fixture_id(jogo, liga_hint, pais_hint)
             
             if not fixture_id:
                 resumo_historico = None
