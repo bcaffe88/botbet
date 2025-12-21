@@ -10,6 +10,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Tuple, Dict, Any
 import aiohttp
 
+try:
+    import psycopg2
+except ImportError:  # pragma: no cover - optional dependency
+    psycopg2 = None
+
 # Configurar logging
 logging.basicConfig(
     level=logging.INFO,
@@ -34,6 +39,13 @@ DEFAULT_TIMEOUT = 15
 DB_PATH = Path(os.getenv("ESTATISTICAS_DB_PATH", "estatisticas.db"))
 MAX_CACHE_DIAS = int(os.getenv("ESTATISTICAS_CACHE_DIAS", "7"))
 ISO_TS_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
+PG_DSN = os.getenv("DATABASE_URL")
+PG_HOST = os.getenv("PGHOST")
+PG_PORT = os.getenv("PGPORT")
+PG_USER = os.getenv("PGUSER")
+PG_PASSWORD = os.getenv("PGPASSWORD")
+PG_DATABASE = os.getenv("PGDATABASE")
 
 # Mapeamento manual de nomes comuns para nomes oficiais na API
 NOMES_OFICIAIS = {
@@ -78,6 +90,31 @@ def similaridade(a: str, b: str) -> float:
         return 0.0
 
 
+def usar_postgres() -> bool:
+    return bool(PG_DSN or PG_HOST) and psycopg2 is not None
+
+
+def _get_pg_conn():
+    if PG_DSN:
+        return psycopg2.connect(PG_DSN)
+    return psycopg2.connect(
+        host=PG_HOST,
+        port=PG_PORT or 5432,
+        user=PG_USER,
+        password=PG_PASSWORD,
+        dbname=PG_DATABASE,
+    )
+
+
+def _get_conn():
+    if usar_postgres():
+        conn = _get_pg_conn()
+        conn.autocommit = True
+        return conn
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    return sqlite3.connect(DB_PATH)
+
+
 def _ordenar_dupla(time1: str, time2: str) -> Tuple[str, str, str, str]:
     """Normaliza e ordena os nomes dos times para manter chave determinística"""
     t1_norm = normalizar(time1)
@@ -90,34 +127,96 @@ def _ordenar_dupla(time1: str, time2: str) -> Tuple[str, str, str, str]:
 def init_db():
     """Inicializa o banco SQLite para armazenar históricos"""
     try:
-        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(DB_PATH) as conn:
-            # Usamos timestamps UTC em formato TEXT para alinhar com as funções datetime/DATE do SQLite
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS historico_estatisticas (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    time1 TEXT NOT NULL,
-                    time2 TEXT NOT NULL,
-                    time1_norm TEXT NOT NULL,
-                    time2_norm TEXT NOT NULL,
-                    resumo TEXT NOT NULL,
-                    gols_1t_time1 INTEGER,
-                    gols_1t_time2 INTEGER,
-                    confrontos_json TEXT,
-                    tendencia TEXT,
-                    odd_registrada TEXT DEFAULT '',
-                    data_ref TEXT DEFAULT (strftime('%Y-%m-%d','now','utc')),
-                    criado_em TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now','utc'))
-                );
-                """
-            )
-            conn.execute(
-                """
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_historico_unico
-                ON historico_estatisticas(time1_norm, time2_norm, data_ref, odd_registrada);
-                """
-            )
+        with _get_conn() as conn:
+            cur = conn.cursor()
+            if usar_postgres():
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS historico_resumos (
+                        id SERIAL PRIMARY KEY,
+                        time1 TEXT NOT NULL,
+                        time2 TEXT NOT NULL,
+                        time1_norm TEXT NOT NULL,
+                        time2_norm TEXT NOT NULL,
+                        resumo TEXT NOT NULL,
+                        gols_1t_time1 INTEGER,
+                        gols_1t_time2 INTEGER,
+                        confrontos_json TEXT,
+                        tendencia TEXT,
+                        odd_registrada TEXT DEFAULT '',
+                        data_ref DATE DEFAULT CURRENT_DATE,
+                        created_at TIMESTAMPTZ DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                    """
+                )
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS fixtures_cache (
+                        id SERIAL PRIMARY KEY,
+                        fixture_id BIGINT UNIQUE,
+                        time1 TEXT NOT NULL,
+                        time2 TEXT NOT NULL,
+                        time1_norm TEXT NOT NULL,
+                        time2_norm TEXT NOT NULL,
+                        odd_referencia TEXT,
+                        status TEXT DEFAULT 'PENDENTE',
+                        gols_ht INTEGER,
+                        gols_ft INTEGER,
+                        resultado TEXT,
+                        data_jogo TIMESTAMPTZ,
+                        created_at TIMESTAMPTZ DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                    """
+                )
+                cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_hr_unique ON historico_resumos(time1_norm, time2_norm, data_ref, odd_registrada);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_fx_times ON fixtures_cache(time1_norm, time2_norm, updated_at);")
+            else:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS historico_resumos (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        time1 TEXT NOT NULL,
+                        time2 TEXT NOT NULL,
+                        time1_norm TEXT NOT NULL,
+                        time2_norm TEXT NOT NULL,
+                        resumo TEXT NOT NULL,
+                        gols_1t_time1 INTEGER,
+                        gols_1t_time2 INTEGER,
+                        confrontos_json TEXT,
+                        tendencia TEXT,
+                        odd_registrada TEXT DEFAULT '',
+                        data_ref TEXT DEFAULT (strftime('%Y-%m-%d','now','utc')),
+                        created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now','utc')),
+                        updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now','utc'))
+                    );
+                    """
+                )
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS fixtures_cache (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        fixture_id INTEGER UNIQUE,
+                        time1 TEXT NOT NULL,
+                        time2 TEXT NOT NULL,
+                        time1_norm TEXT NOT NULL,
+                        time2_norm TEXT NOT NULL,
+                        odd_referencia TEXT,
+                        status TEXT DEFAULT 'PENDENTE',
+                        gols_ht INTEGER,
+                        gols_ft INTEGER,
+                        resultado TEXT,
+                        data_jogo TEXT,
+                        created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now','utc')),
+                        updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now','utc'))
+                    );
+                    """
+                )
+                cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_hr_unique ON historico_resumos(time1_norm, time2_norm, data_ref, odd_registrada);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_fx_times ON fixtures_cache(time1_norm, time2_norm, updated_at);")
+            if not usar_postgres():
+                conn.commit()
     except Exception as e:
         logger.error(f"Erro ao inicializar o banco de dados: {e}")
 
@@ -139,34 +238,163 @@ def salvar_resumo_db(
         confrontos_json = json.dumps(confrontos or [])
         odd_valor = odd_referencia or ""
 
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO historico_estatisticas
-                (time1, time2, time1_norm, time2_norm, resumo, gols_1t_time1, gols_1t_time2, confrontos_json, tendencia, odd_registrada, data_ref)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d','now','utc'));
-                """,
-                (
-                    time1_ord,
-                    time2_ord,
-                    t1_norm,
-                    t2_norm,
-                    resumo,
-                    gols_1t_time1,
-                    gols_1t_time2,
-                    confrontos_json,
-                    tendencia,
-                    odd_valor,
-                ),
-            )
+        with _get_conn() as conn:
+            cur = conn.cursor()
+            if usar_postgres():
+                cur.execute(
+                    """
+                    INSERT INTO historico_resumos
+                    (time1, time2, time1_norm, time2_norm, resumo, gols_1t_time1, gols_1t_time2, confrontos_json, tendencia, odd_registrada, data_ref, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_DATE, NOW(), NOW())
+                    ON CONFLICT (time1_norm, time2_norm, data_ref, odd_registrada)
+                    DO UPDATE SET resumo=EXCLUDED.resumo, gols_1t_time1=EXCLUDED.gols_1t_time1, gols_1t_time2=EXCLUDED.gols_1t_time2, confrontos_json=EXCLUDED.confrontos_json, tendencia=EXCLUDED.tendencia, updated_at=NOW();
+                    """,
+                    (
+                        time1_ord,
+                        time2_ord,
+                        t1_norm,
+                        t2_norm,
+                        resumo,
+                        gols_1t_time1,
+                        gols_1t_time2,
+                        confrontos_json,
+                        tendencia,
+                        odd_valor,
+                    ),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT OR REPLACE INTO historico_resumos
+                    (time1, time2, time1_norm, time2_norm, resumo, gols_1t_time1, gols_1t_time2, confrontos_json, tendencia, odd_registrada, data_ref, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d','now','utc'), strftime('%Y-%m-%dT%H:%M:%SZ','now','utc'));
+                    """,
+                    (
+                        time1_ord,
+                        time2_ord,
+                        t1_norm,
+                        t2_norm,
+                        resumo,
+                        gols_1t_time1,
+                        gols_1t_time2,
+                        confrontos_json,
+                        tendencia,
+                        odd_valor,
+                    ),
+                )
+            if not usar_postgres():
+                conn.commit()
     except Exception as e:
         logger.error(f"Erro ao salvar resumo no banco de dados: {e}")
 
+def salvar_fixture_pendente(time1: str, time2: str, fixture_id: Optional[int], odd_referencia: Optional[str], data_jogo: Optional[str]):
+    """Grava fixture pendente para atualização posterior"""
+    try:
+        init_db()
+        time1_ord, time2_ord, t1_norm, t2_norm = _ordenar_dupla(time1, time2)
+        with _get_conn() as conn:
+            cur = conn.cursor()
+            if usar_postgres():
+                cur.execute(
+                    """
+                    INSERT INTO fixtures_cache (fixture_id, time1, time2, time1_norm, time2_norm, odd_referencia, status, data_jogo, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, 'PENDENTE', %s, NOW(), NOW())
+                    ON CONFLICT (fixture_id) DO UPDATE SET odd_referencia = EXCLUDED.odd_referencia, updated_at = NOW(), status = 'PENDENTE';
+                    """,
+                    (fixture_id, time1_ord, time2_ord, t1_norm, t2_norm, odd_referencia, data_jogo),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT OR REPLACE INTO fixtures_cache (fixture_id, time1, time2, time1_norm, time2_norm, odd_referencia, status, data_jogo, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, 'PENDENTE', ?, strftime('%Y-%m-%dT%H:%M:%SZ','now','utc'));
+                    """,
+                    (fixture_id, time1_ord, time2_ord, t1_norm, t2_norm, odd_referencia, data_jogo),
+                )
+            if not usar_postgres():
+                conn.commit()
+    except Exception as e:
+        logger.error(f"Erro ao salvar fixture pendente: {e}")
+
+
+def atualizar_fixture_resultado(fixture_id: Optional[int], gols_ht: Optional[int], gols_ft: Optional[int], resultado: Optional[str], data_jogo: Optional[str]):
+    """Atualiza resultado de fixture pós-jogo"""
+    if not fixture_id:
+        return
+    try:
+        init_db()
+        with _get_conn() as conn:
+            cur = conn.cursor()
+            if usar_postgres():
+                cur.execute(
+                    """
+                    UPDATE fixtures_cache
+                    SET gols_ht = %s, gols_ft = %s, resultado = %s, status = 'FINALIZADO', data_jogo = COALESCE(%s, data_jogo), updated_at = NOW()
+                    WHERE fixture_id = %s;
+                    """,
+                    (gols_ht, gols_ft, resultado, data_jogo, fixture_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE fixtures_cache
+                    SET gols_ht = ?, gols_ft = ?, resultado = ?, status = 'FINALIZADO', data_jogo = COALESCE(?, data_jogo), updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now','utc')
+                    WHERE fixture_id = ?;
+                    """,
+                    (gols_ht, gols_ft, resultado, data_jogo, fixture_id),
+                )
+            if not usar_postgres():
+                conn.commit()
+    except Exception as e:
+        logger.error(f"Erro ao atualizar fixture: {e}")
+
+
+def obter_metricas_historicas(time1: str, time2: str, max_rows: int = 10) -> Tuple[float, Optional[str]]:
+    """Retorna percentual de gols no 1T em fixtures próprios e último resultado"""
+    try:
+        init_db()
+        _, _, t1_norm, t2_norm = _ordenar_dupla(time1, time2)
+        with _get_conn() as conn:
+            cur = conn.cursor()
+            if usar_postgres():
+                cur.execute(
+                    """
+                    SELECT gols_ht, resultado
+                    FROM fixtures_cache
+                    WHERE time1_norm = %s AND time2_norm = %s AND status = 'FINALIZADO'
+                    ORDER BY updated_at DESC
+                    LIMIT %s;
+                    """,
+                    (t1_norm, t2_norm, max_rows),
+                )
+                rows = cur.fetchall()
+            else:
+                cur.execute(
+                    """
+                    SELECT gols_ht, resultado
+                    FROM fixtures_cache
+                    WHERE time1_norm = ? AND time2_norm = ? AND status = 'FINALIZADO'
+                    ORDER BY datetime(updated_at) DESC
+                    LIMIT ?;
+                    """,
+                    (t1_norm, t2_norm, max_rows),
+                )
+                rows = cur.fetchall()
+        if not rows:
+            return 0.0, None
+        com_gol = sum(1 for r in rows if r[0] and r[0] > 0)
+        perc = com_gol / len(rows)
+        last_result = rows[0][1]
+        return perc, last_result
+    except Exception as e:
+        logger.error(f"Erro ao obter métricas históricas: {e}")
+        return 0.0, None
 
 def carregar_resumo_recente(time1: str, time2: str) -> Optional[Dict[str, Any]]:
     """Recupera resumo recente salvo no banco para evitar chamadas repetidas à API"""
     if not DB_PATH.exists():
-        return None
+        if not usar_postgres():
+            return None
 
     _, _, t1_norm, t2_norm = _ordenar_dupla(time1, time2)
     # SQLite datetime('now','utc') usa o formato abaixo; mantemos a mesma assinatura para comparações
@@ -175,22 +403,37 @@ def carregar_resumo_recente(time1: str, time2: str) -> Optional[Dict[str, Any]]:
     )
 
     try:
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.row_factory = sqlite3.Row
-            row = conn.execute(
-                """
-                SELECT resumo, confrontos_json, tendencia, odd_registrada, gols_1t_time1, gols_1t_time2, criado_em
-                FROM historico_estatisticas
-                WHERE time1_norm = ? AND time2_norm = ? AND datetime(criado_em) >= ?
-                ORDER BY datetime(criado_em) DESC
-                LIMIT 1;
-                """,
-                (t1_norm, t2_norm, limite),
-            ).fetchone()
-
-        if row:
-            logger.info("♻️ Resumo estatístico recuperado do banco local")
-            return dict(row)
+        with _get_conn() as conn:
+            cur = conn.cursor()
+            if usar_postgres():
+                cur.execute(
+                    """
+                    SELECT resumo, confrontos_json, tendencia, odd_registrada, gols_1t_time1, gols_1t_time2, created_at
+                    FROM historico_resumos
+                    WHERE time1_norm = %s AND time2_norm = %s AND created_at >= %s::timestamptz
+                    ORDER BY created_at DESC
+                    LIMIT 1;
+                    """,
+                    (t1_norm, t2_norm, limite),
+                )
+                row = cur.fetchone()
+                if row:
+                    keys = ["resumo", "confrontos_json", "tendencia", "odd_registrada", "gols_1t_time1", "gols_1t_time2", "criado_em"]
+                    return dict(zip(keys, row))
+            else:
+                conn.row_factory = sqlite3.Row
+                row = conn.execute(
+                    """
+                    SELECT resumo, confrontos_json, tendencia, odd_registrada, gols_1t_time1, gols_1t_time2, created_at as criado_em
+                    FROM historico_resumos
+                    WHERE time1_norm = ? AND time2_norm = ? AND datetime(created_at) >= ?
+                    ORDER BY datetime(created_at) DESC
+                    LIMIT 1;
+                    """,
+                    (t1_norm, t2_norm, limite),
+                ).fetchone()
+                if row:
+                    return dict(row)
     except Exception as e:
         logger.error(f"Erro ao carregar resumo do banco: {e}")
 

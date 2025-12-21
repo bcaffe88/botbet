@@ -11,7 +11,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
 import aiohttp
 import traceback
-from estatisticas_time import resumo_estatistico
+from estatisticas_time import resumo_estatistico, salvar_fixture_pendente, atualizar_fixture_resultado, obter_metricas_historicas
 
 # Configurar logging
 logging.basicConfig(
@@ -293,11 +293,25 @@ async def tarefa_veredito_dinamico_ht(fixture_id, msg_original, goal_line):
                     data = await resp.json()
                     if data.get('results', 0) > 0:
                         fixture = data['response'][0]
+                        data_jogo = fixture.get('fixture', {}).get('date')
                         gols_casa_ht = fixture.get('score', {}).get('halftime', {}).get('home', 0)
                         gols_fora_ht = fixture.get('score', {}).get('halftime', {}).get('away', 0)
                         
                         gols_ht = gols_casa_ht + gols_fora_ht
+                        gols_casa_ft = fixture.get('score', {}).get('fulltime', {}).get('home')
+                        gols_fora_ft = fixture.get('score', {}).get('fulltime', {}).get('away')
+                        total_ft = (gols_casa_ft or 0) + (gols_fora_ft or 0)
                         resultado_final = "G R E E N ✅✅✅✅✅✅✅✅✅✅" if gols_ht > goal_line else "R E D ❌"
+                        try:
+                            atualizar_fixture_resultado(
+                                fixture_id,
+                                gols_ht,
+                                total_ft if total_ft else None,
+                                resultado_final,
+                                data_jogo,
+                            )
+                        except Exception as persist_err:
+                            logger.error(f"Erro ao persistir resultado final: {persist_err}")
                     else:
                         logger.warning(f"⚠️ [Over {goal_line} HT] API não retornou dados para fixture.")
                 else:
@@ -398,6 +412,20 @@ async def analisar(texto):
             pontos_tecnicos += 1
         
         pontos_total = pontos_tecnicos + pontos_clima
+        bonus_hist = 0.0
+        nomes_times = extrair_times(jogo)
+        if len(nomes_times) == 2:
+            perc_hist, ultimo_res = obter_metricas_historicas(nomes_times[0], nomes_times[1])
+            if perc_hist >= 0.6:
+                bonus_hist += 1
+                criterios_tecnicos.append("Histórico próprio favorável")
+            elif perc_hist >= 0.4:
+                bonus_hist += 0.5
+                criterios_tecnicos.append("Histórico próprio moderado")
+            if ultimo_res and "RED" in ultimo_res:
+                bonus_hist -= 0.5
+                criterios_tecnicos.append("Alerta RED recente")
+        pontos_total += bonus_hist
         
         logger.info(f"📈 Pontos Técnicos: {pontos_tecnicos}/10 | 🌤️ Pontos Clima: {pontos_clima}/4 | 🎯 Total: {pontos_total}")
 
@@ -428,6 +456,13 @@ async def analisar(texto):
                 logger.info(f"✅ Sinal enviado para '{jogo}' (sem dados da API).")
                 logger.warning(f"Veredito não agendado para '{jogo}' pois o fixture ID não pôde ser encontrado.")
                 return
+            else:
+                try:
+                    partes_jogo = extrair_times(jogo)
+                    if len(partes_jogo) == 2:
+                        salvar_fixture_pendente(partes_jogo[0], partes_jogo[1], fixture_id, None, None)
+                except Exception as persist_err:
+                    logger.error(f"Erro ao salvar fixture pendente: {persist_err}")
 
             gols_ht_atuais = await verificar_placar_ht_ao_vivo(fixture_id)
 
@@ -444,6 +479,7 @@ async def analisar(texto):
                 partes_jogo = extrair_times(jogo)
                 if len(partes_jogo) == 2:
                     odd_ref = odd_ht if odd_ht != "N/D" else None
+                    salvar_fixture_pendente(partes_jogo[0], partes_jogo[1], fixture_id, odd_ref, None)
                     resumo_historico = await resumo_estatistico(partes_jogo[0], partes_jogo[1], odd_ref)
             except Exception as hist_error:
                 logger.error(f"Erro ao obter histórico do confronto: {hist_error}")
