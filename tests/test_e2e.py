@@ -303,7 +303,8 @@ class TestClimateAnalysis:
         texto = "🌡️ 22°C ☁️ 40% 💧 60% 💨 15 m/s"
         pontos, criterios, status = main.analisar_clima(texto)
         assert pontos == 3
-        assert "Vento" not in " ".join(criterios)
+        # High wind should not add any wind-related criteria
+        assert not any("Vento" in c for c in criterios)
 
     def test_analisar_clima_no_data(self):
         """Test climate analysis with no climate data."""
