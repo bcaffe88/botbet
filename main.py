@@ -153,6 +153,7 @@ async def buscar_fixture_id(nome_jogo: str, liga_hint: str | None = None, pais_h
                                 fixture_id = melhor_match.get("fixture", {}).get("id")
                                 api_name = f"{melhor_match['teams']['home']['name']} x {melhor_match['teams']['away']['name']}"
                                 logger.info(f"✅ Fixture encontrado para '{nome_jogo}' ≈ '{api_name}': ID {fixture_id} (Similaridade: {maior_similaridade:.2f})")
+                                logger.info("metrics.fixture_found")
                                 return fixture_id
                             else:
                                 logger.warning(f"  ❌ Primeira busca falhou. Nenhuma similaridade > {maior_similaridade} encontrada.")

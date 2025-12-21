@@ -254,6 +254,7 @@ def atualizar_fixture_resultado(fixture_id: Optional[int], gols_ht: Optional[int
                 """,
                 (gols_ht, gols_ft, resultado, data_jogo, fixture_id),
             )
+            logger.info("metrics.result_updated")
     except Exception as e:
         logger.error(f"Erro ao atualizar fixture: {e}")
 
@@ -282,6 +283,7 @@ def obter_metricas_historicas(time1: str, time2: str, max_rows: int = 10) -> Tup
         com_gol = sum(1 for r in rows if r[0] and r[0] > 0)
         perc = com_gol / len(rows)
         last_result = rows[0][1]
+        logger.info("metrics.hist_available")
         return perc, last_result
     except Exception as e:
         logger.error(f"Erro ao obter métricas históricas: {e}")
@@ -311,6 +313,7 @@ def carregar_resumo_recente(time1: str, time2: str) -> Optional[Dict[str, Any]]:
             row = cur.fetchone()
             if row:
                 keys = ["resumo", "confrontos_json", "tendencia", "odd_registrada", "gols_1t_time1", "gols_1t_time2", "criado_em"]
+                logger.info("metrics.cache_hit")
                 return dict(zip(keys, row))
             logger.info("metrics.cache_miss")
     except Exception as e:
