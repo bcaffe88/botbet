@@ -313,7 +313,15 @@ def calcular_bonus_historico(
     bonus_med: float,
     penalty_red: float,
 ) -> Tuple[float, List[str]]:
-    """Calcula bônus/penalidade histórica de forma pura para testes."""
+    """
+    Calcula bônus/penalidade histórica de forma pura para testes.
+    :param perc_hist: percentual (0-1) de jogos com gol no 1º tempo.
+    :param ultimo_res: resultado textual do último jogo próprio (ex.: 'GREEN', 'RED').
+    :param bonus_high: limiar para bônus cheio (+1).
+    :param bonus_med: limiar para bônus moderado (+0.5).
+    :param penalty_red: penalidade aplicada quando há RED recente.
+    :return: tupla (bônus numérico, lista de critérios aplicados).
+    """
     bonus = 0.0
     criterios: List[str] = []
 
