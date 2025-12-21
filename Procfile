@@ -1,1 +1,1 @@
-web: python3 main_webhook.py
+web: gunicorn overbot_vip:app

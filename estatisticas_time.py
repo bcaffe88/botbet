@@ -338,6 +338,21 @@ def calcular_bonus_historico(
 
     return bonus, criterios
 
+
+def rotular_odd(valor: Optional[str], origem: Optional[str] = None) -> str:
+    """
+    Retorna a odd com rótulo indicando a origem (pré-live/ao vivo).
+    Mantém "N/D" quando o valor não é conhecido.
+    """
+    if not valor or valor == "N/D":
+        return "N/D"
+
+    origem_norm = (origem or "").lower()
+    tags = {"pre-live": "PRÉ-LIVE", "live": "AO VIVO"}
+    tag = tags.get(origem_norm, "ORIGEM DESCONHECIDA")
+
+    return f"{valor} ({tag})"
+
 def carregar_resumo_recente(time1: str, time2: str) -> Optional[Dict[str, Any]]:
     """Recupera resumo recente salvo no banco para evitar chamadas repetidas à API"""
     _, _, t1_norm, t2_norm = _ordenar_dupla(time1, time2)

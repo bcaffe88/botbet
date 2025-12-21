@@ -59,6 +59,11 @@ class HistoricoTests(unittest.TestCase):
         self.assertTrue(any("historico_resumos" in sql for sql in executed))
         self.assertTrue(any("fixtures_cache" in sql for sql in executed))
 
+    def test_rotular_odd(self):
+        self.assertEqual(et.rotular_odd("1.90", "pre-live"), "1.90 (PRÉ-LIVE)")
+        self.assertEqual(et.rotular_odd("2.05", "live"), "2.05 (AO VIVO)")
+        self.assertEqual(et.rotular_odd("N/D", "pre-live"), "N/D")
+
 
 if __name__ == "__main__":
     unittest.main()
