@@ -4,13 +4,14 @@ import unicodedata
 import asyncio
 from zoneinfo import ZoneInfo
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
 import aiohttp
 import traceback
+from keep_alive import keep_alive
 from estatisticas_time import (
     resumo_estatistico,
     salvar_fixture_pendente,
@@ -602,6 +603,11 @@ async def main():
         logger.info("🚀 Iniciando Bot Over HT - Apenas Confiança ALTA")
         logger.info(f"📍 Monitorando chat: {CHAT_ID_SINAL}")
         logger.info(f"📍 Enviando para: {CHAT_ID_DESTINO}")
+        try:
+            keep_alive()
+            logger.info("🌐 Endpoint /metrics iniciado")
+        except Exception as ka_err:
+            logger.error(f"Falha ao iniciar keep_alive/metrics: {ka_err}")
         
         app = ApplicationBuilder().token(BOT_TOKEN).build()
         app.add_handler(CommandHandler("start", start_command))
