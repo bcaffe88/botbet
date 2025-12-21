@@ -2,6 +2,7 @@ import os
 import re
 import unicodedata
 import asyncio
+from zoneinfo import ZoneInfo
 import logging
 from datetime import datetime
 from difflib import SequenceMatcher
@@ -38,6 +39,23 @@ except ValueError as e:
 # Inicializar bot
 bot = Bot(token=BOT_TOKEN)
 
+ALTA_STAKE = "0.75%"
+MUITO_ALTA_STAKE = "1%"
+VERY_HIGH_CONFIDENCE_THRESHOLD = 12
+OPERATING_START_HOUR = 8   # 08:00 local time
+OPERATING_END_HOUR = 0     # 00:00 local time (next day boundary)
+OPERATING_TZ = ZoneInfo("America/Sao_Paulo")
+CONFIDENCE_MAP = {
+    "ALTA": f"ALTA ✅ STAKE {ALTA_STAKE}",
+    "MUITO ALTA": f"MUITO ALTA ✅✅ STAKE {MUITO_ALTA_STAKE}"
+}
+
+def dentro_janela_operacao(hora: int) -> bool:
+    """Retorna True se hora está entre 08:00 e 00:00 (faixa cruzando meia-noite)."""
+    if OPERATING_START_HOUR < OPERATING_END_HOUR:
+        return OPERATING_START_HOUR <= hora < OPERATING_END_HOUR
+    return hora >= OPERATING_START_HOUR or hora < OPERATING_END_HOUR
+
 # --- Funções Utilitárias ---
 def normalizar(texto):
     if not texto: return ""
@@ -51,7 +69,7 @@ async def buscar_fixture_id(nome_jogo: str) -> int | None:
     if not nome_jogo or not FOOTBALL_API_KEY:
         return None
     headers = {"x-apisports-key": FOOTBALL_API_KEY}
-    data_hoje = datetime.now().strftime("%Y-%m-%d")
+    data_hoje = datetime.now(OPERATING_TZ).strftime("%Y-%m-%d")
     url_fixtures = f"https://v3.football.api-sports.io/fixtures?date={data_hoje}"
     
     logger.info(f"🔎 Buscando fixture para '{nome_jogo}' em TODOS os jogos da data: {data_hoje}")
@@ -295,8 +313,12 @@ async def tarefa_veredito_dinamico_ht(fixture_id, msg_original, goal_line):
             except Exception as edit_error:
                 logger.error(f"❌ Falha ao editar mensagem para fixture {fixture_id}: {edit_error}")
 
-# --- Análise Principal (SOMENTE CONFIANÇA MUITO ALTA) ---
+# --- Análise Principal (CONFIANÇA ALTA/MUITO ALTA) ---
 async def analisar(texto):
+    hora_atual = datetime.now(OPERATING_TZ).hour
+    if not dentro_janela_operacao(hora_atual):
+        logger.info(f"⏸️ Fora da janela de operação ({hora_atual}h). Sinal ignorado.")
+        return
     logger.info("📊 Iniciando análise do sinal 'Over 0.5 HT'")
     try:
         jogo_match = re.search(r'⚽️\s*(.+)', texto)
@@ -371,11 +393,11 @@ async def analisar(texto):
         
         logger.info(f"📈 Pontos Técnicos: {pontos_tecnicos}/10 | 🌤️ Pontos Clima: {pontos_clima}/4 | 🎯 Total: {pontos_total}")
 
-        # SOMENTE CONFIANÇA ALTA (>= 10 e < 12 pontos)
-        if pontos_total >= 10 and pontos_total < 12:
-            logger.info(f"✅ Pontuação ALTA ({pontos_total}) para '{jogo}'. Iniciando validação com API...")
-            
-            confianca = "ALTA ✅ STAKE 0.75%"
+        # SOMENTE CONFIANÇA ALTA (>= 10 pontos)
+        if pontos_total >= 10:
+            nivel_confianca = "ALTA" if pontos_total < VERY_HIGH_CONFIDENCE_THRESHOLD else "MUITO ALTA"
+            confianca = CONFIDENCE_MAP[nivel_confianca]
+            logger.info(f"✅ Pontuação {nivel_confianca} ({pontos_total}) para '{jogo}'. Iniciando validação com API...")
 
             resumo_clima = f" {status_clima} ({pontos_clima}/4pts)"
             resumo_tecnico = f" {pontos_tecnicos}/10pts"
@@ -413,7 +435,7 @@ async def analisar(texto):
             asyncio.create_task(tarefa_veredito_dinamico_ht(fixture_id, msg_enviada, goal_line_alvo))
         
         else:
-            logger.info(f"❌ Pontuação insuficiente ({pontos_total}) para '{jogo}'. Necessário >= 10 e < 12 para CONFIANÇA ALTA. Sinal ignorado.")
+            logger.info(f"❌ Pontuação insuficiente ({pontos_total}) para '{jogo}'. Necessário >= 10 para CONFIANÇA ALTA/MUITO ALTA. Sinal ignorado.")
     
     except Exception as e:
         logger.error(f"Erro na análise principal: {e}")
