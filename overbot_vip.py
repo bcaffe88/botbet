@@ -15,12 +15,12 @@ print("🚀 OverBot VIP v3.3 [MODO PRODUÇÃO - GATILHO OTIMIZADO]... Iniciando.
 app = Flask(__name__)
 
 # Variáveis de ambiente
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN_ADMIN = os.getenv("BOT_TOKEN_ADMIN") or os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
 STRIPE_API_KEY = os.getenv("STRIPE_API_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", "895248440"))
-CHANNEL_ID = os.getenv("CHANNEL_ID")
+CHANNEL_ID_ADMIN = os.getenv("CHANNEL_ID_ADMIN") or os.getenv("CHANNEL_ID")
 
 STRIPE_LINK_MENSAL = os.getenv("STRIPE_LINK_MENSAL")
 STRIPE_LINK_VITALICIO = os.getenv("STRIPE_LINK_VITALICIO")
@@ -43,9 +43,9 @@ def ensure_tables():
 # Controle de tarefas em segundo plano
 task_control = {"last_run": None}
 
-print(f"Bot Token: {'✅ Carregado' if BOT_TOKEN else '❌ Faltando'}")
+print(f"Bot Token Admin: {'✅ Carregado' if BOT_TOKEN_ADMIN else '❌ Faltando'}")
 print(f"Database URL: {'✅ Carregada' if DATABASE_URL else '❌ Faltando'}")
-print(f"Channel ID: {'✅ Carregado' if CHANNEL_ID else '❌ Faltando'}")
+print(f"Channel ID Admin: {'✅ Carregado' if CHANNEL_ID_ADMIN else '❌ Faltando'}")
 print(f"Admin User ID: {ADMIN_USER_ID}")
 
 
@@ -68,7 +68,7 @@ class User(db.Model):
 
 
 def send_telegram_message(chat_id, text, reply_markup=None):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{BOT_TOKEN_ADMIN}/sendMessage"
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
     if reply_markup:
         payload["reply_markup"] = json.dumps(reply_markup)
@@ -82,7 +82,7 @@ def send_telegram_message(chat_id, text, reply_markup=None):
 
 
 def answer_callback_query(callback_query_id, text="", show_alert=False):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/answerCallbackQuery"
+    url = f"https://api.telegram.org/bot{BOT_TOKEN_ADMIN}/answerCallbackQuery"
     payload = {
         "callback_query_id": callback_query_id,
         "text": text,
@@ -95,11 +95,11 @@ def answer_callback_query(callback_query_id, text="", show_alert=False):
 
 
 def create_invite_link(chat_id):
-    if not CHANNEL_ID:
+    if not CHANNEL_ID_ADMIN:
         return None
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/createChatInviteLink"
+    url = f"https://api.telegram.org/bot{BOT_TOKEN_ADMIN}/createChatInviteLink"
     expire_date = int((datetime.now() + timedelta(days=1)).timestamp())
-    payload = {"chat_id": CHANNEL_ID, "expire_date": expire_date, "member_limit": 1}
+    payload = {"chat_id": CHANNEL_ID_ADMIN, "expire_date": expire_date, "member_limit": 1}
     try:
         response = requests.post(url, json=payload, timeout=10)
         response.raise_for_status()
@@ -113,10 +113,10 @@ def create_invite_link(chat_id):
 
 
 def kick_user_from_channel(user_id):
-    if not CHANNEL_ID:
+    if not CHANNEL_ID_ADMIN:
         return False
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/banChatMember"
-    payload = {"chat_id": CHANNEL_ID, "user_id": user_id, "revoke_messages": True}
+    url = f"https://api.telegram.org/bot{BOT_TOKEN_ADMIN}/banChatMember"
+    payload = {"chat_id": CHANNEL_ID_ADMIN, "user_id": user_id, "revoke_messages": True}
     try:
         response = requests.post(url, json=payload, timeout=10)
         response.raise_for_status()
@@ -315,7 +315,7 @@ Use /start para ver as opções. Não conte com a sorte!"""
         print(f"💀 Acesso desativado e usuário expulso para {user.first_name} ({user.id})")
 
 
-@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+@app.route(f"/{BOT_TOKEN_ADMIN}", methods=["POST"])
 def telegram_webhook():
     update = request.get_json()
     if "message" in update and "text" in update["message"] and update["message"]["text"] == "/start":
@@ -448,7 +448,7 @@ LANDING_TEMPLATE = """
 def landing_page():
     return render_template_string(
         LANDING_TEMPLATE,
-        channel=CHANNEL_ID,
+        channel=CHANNEL_ID_ADMIN,
         link_mensal=STRIPE_LINK_MENSAL,
         link_vitalicio=STRIPE_LINK_VITALICIO,
         botadmin="botadmin",
