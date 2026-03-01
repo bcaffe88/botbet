@@ -2,6 +2,7 @@
 Testes para as funções do botadmin (overbot_vip.py)
 """
 import os
+import json
 import unittest
 from unittest.mock import patch, MagicMock
 from datetime import datetime, timedelta
@@ -164,7 +165,7 @@ class TestBotAdminFunctions(unittest.TestCase):
             with patch('overbot_vip.send_telegram_message'):
                 with patch('overbot_vip.create_invite_link', return_value='https://t.me/+abc123'):
                     response = self.client.post('/stripe-webhook',
-                                                data=str(payload),
+                                                data=json.dumps(payload),
                                                 content_type='application/json')
                     self.assertEqual(response.status_code, 200)
                     
