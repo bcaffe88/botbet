@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from telethon import TelegramClient, events
+from telethon import TelegramClient
 from telethon.sessions import StringSession
 import aiohttp
 import traceback
@@ -33,7 +33,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Validar e configurar variáveis de ambiente
-# 👇 Adicione "TELEGRAM_SESSION" na lista abaixo
 required_vars = ["BOT_TOKEN", "API_ID", "API_HASH", "CHAT_ID_SINAL", "CHAT_ID_DESTINO", "FOOTBALL_API_KEY", "TELEGRAM_SESSION"]
 missing_vars = [var for var in required_vars if not os.getenv(var)]
 
@@ -47,7 +46,7 @@ try:
     CHAT_ID_SINAL = int(os.getenv("CHAT_ID_SINAL"))
     CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"))
     FOOTBALL_API_KEY = os.getenv("FOOTBALL_API_KEY")
-    TELEGRAM_SESSION = os.getenv("TELEGRAM_SESSION")  # 👈 ADICIONE ESTA LINHA AQUI
+    TELEGRAM_SESSION = os.getenv("TELEGRAM_SESSION")
 except ValueError as e:
     raise ValueError(f"Erro ao converter variáveis numéricas: {e}")
 
@@ -328,15 +327,6 @@ async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
 
 
 async def buscar_odd_pre_live(fixture_id: int, goal_line: float) -> OddResultado:
-    """
-    Busca odd pré-live para o mercado de primeiro tempo e
-    faz fallback para a odd ao vivo se necessário.
-    Retorno (OddResultado):
-      - valor: odd encontrada ou "N/D"
-      - origem: "pre-live" quando veio do endpoint /odds,
-        "live" quando veio do fallback /odds/live,
-        "unavailable" quando o fixture_id está ausente ou nenhuma odd foi localizada após todas as tentativas
-    """
     odd_encontrada = "N/D"
     if not fixture_id:
         return OddResultado(odd_encontrada, "unavailable")
@@ -658,19 +648,41 @@ async def analisar(texto):
 # --- Telethon Client ---
 client = TelegramClient(StringSession(TELEGRAM_SESSION), API_ID, API_HASH)
 
-@client.on(events.NewMessage(chats=CHAT_ID_SINAL))
-async def roteador_de_sinais(event):
+# --- Radar de Sinais (Bypass de Restrição) ---
+async def radar_anti_restricao():
+    logger.info("📡 Iniciando radar de escuta (Modo Polling Anti-Restrição)...")
+    ultimo_id = 0
     try:
-        conteudo = event.message.message
-        if not conteudo:
-            return
-        
-        # Apenas processar sinais "OVER 0.5 HT"
-        if "OVER 0.5 HT" in conteudo and "Inteligência Artificial" in conteudo:
-            logger.info("Sinal 'OVER 0.5 HT' detectado. Roteando para análise principal.")
-            await analisar(conteudo)
+        # Calibra o radar na última mensagem para não ler coisas repetidas
+        msgs = await client.get_messages(CHAT_ID_SINAL, limit=1)
+        if msgs:
+            ultimo_id = msgs[0].id
+            logger.info(f"📡 Radar calibrado. Ignorando mensagens antigas até ID {ultimo_id}.")
     except Exception as e:
-        logger.error(f"Erro no roteador de sinais: {e}")
+        logger.error(f"Erro ao calibrar radar: {e}")
+
+    while True:
+        await asyncio.sleep(3) # Vai olhar o grupo a cada 3 segundos
+        try:
+            msgs = await client.get_messages(CHAT_ID_SINAL, limit=1)
+            if not msgs:
+                continue
+            
+            msg_recente = msgs[0]
+            if msg_recente.id > ultimo_id:
+                ultimo_id = msg_recente.id
+                conteudo = msg_recente.text or ""
+                
+                logger.info(f"👀 Nova mensagem capturada no VIP (ID: {ultimo_id})")
+                
+                if "OVER 0.5 HT" in conteudo and "Inteligência Artificial" in conteudo:
+                    logger.info("🎯 Sinal Validado! Enviando para o cérebro calcular os pontos...")
+                    await analisar(conteudo)
+                else:
+                    logger.info("♻️ Mensagem ignorada (Não é um padrão Over 0.5 HT).")
+        except Exception as e:
+            logger.error(f"⚠️ Erro no radar: {e}")
+            await asyncio.sleep(5)
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Bot Over HT (Confiança Alta) ativo e escutando!")
@@ -702,6 +714,9 @@ async def main():
         me = await client.get_me()
         logger.info(f"✅ Telethon conectado como: {me.first_name} (@{me.username})")
         logger.info("🔄 Bot rodando... Pressione Ctrl+C para parar")
+        
+        # Ativando o novo Radar Polling junto com o loop do Telethon
+        asyncio.create_task(radar_anti_restricao())
         
         await client.run_until_disconnected()
     except KeyboardInterrupt:
