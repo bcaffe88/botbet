@@ -10,6 +10,7 @@ from difflib import SequenceMatcher
 from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 import aiohttp
 import traceback
 from keep_alive import keep_alive
@@ -32,7 +33,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Validar e configurar variáveis de ambiente
-required_vars = ["BOT_TOKEN", "API_ID", "API_HASH", "CHAT_ID_SINAL", "CHAT_ID_DESTINO", "FOOTBALL_API_KEY"]
+# 👇 Adicione "TELEGRAM_SESSION" na lista abaixo
+required_vars = ["BOT_TOKEN", "API_ID", "API_HASH", "CHAT_ID_SINAL", "CHAT_ID_DESTINO", "FOOTBALL_API_KEY", "TELEGRAM_SESSION"]
 missing_vars = [var for var in required_vars if not os.getenv(var)]
 
 if missing_vars:
@@ -45,6 +47,7 @@ try:
     CHAT_ID_SINAL = int(os.getenv("CHAT_ID_SINAL"))
     CHAT_ID_DESTINO = int(os.getenv("CHAT_ID_DESTINO"))
     FOOTBALL_API_KEY = os.getenv("FOOTBALL_API_KEY")
+    TELEGRAM_SESSION = os.getenv("TELEGRAM_SESSION")  # 👈 ADICIONE ESTA LINHA AQUI
 except ValueError as e:
     raise ValueError(f"Erro ao converter variáveis numéricas: {e}")
 
@@ -653,7 +656,7 @@ async def analisar(texto):
         logger.error(traceback.format_exc())
 
 # --- Telethon Client ---
-client = TelegramClient("sessao_sinais", API_ID, API_HASH)
+client = TelegramClient(StringSession(TELEGRAM_SESSION), API_ID, API_HASH)
 
 @client.on(events.NewMessage(chats=CHAT_ID_SINAL))
 async def roteador_de_sinais(event):
