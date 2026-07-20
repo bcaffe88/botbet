@@ -693,7 +693,12 @@ async def main():
         await app.updater.start_polling(drop_pending_updates=True)
         logger.info("✅ Bot do Telegram (para comandos) inicializado")
         
-        await client.start()
+        # Blinda o código para não pedir número de telefone na nuvem
+        await client.connect()
+        if not await client.is_user_authorized():
+            logger.error("❌ A Sessão do Telegram (TELEGRAM_SESSION) expirou ou é inválida!")
+            raise ValueError("Sessão Inválida. Gere uma nova StringSession e atualize na Railway.")
+            
         me = await client.get_me()
         logger.info(f"✅ Telethon conectado como: {me.first_name} (@{me.username})")
         logger.info("🔄 Bot rodando... Pressione Ctrl+C para parar")
