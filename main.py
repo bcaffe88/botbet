@@ -674,8 +674,11 @@ async def radar_anti_restricao():
                 conteudo = msg_recente.text or ""
                 
                 logger.info(f"👀 Nova mensagem capturada no VIP (ID: {ultimo_id})")
-                if "OVER 0.5 HT" in texto_mensagem.upper() and "INTELIGÊNCIA ARTIFICIAL" in texto_mensagem.upper():⁠
-
+                
+                # CORREÇÃO: Usando a variável 'conteudo' e chamando a função de análise se bater a condição
+                if "OVER 0.5 HT" in conteudo.upper() and "INTELIGÊNCIA ARTIFICIAL" in conteudo.upper():
+                    logger.info("✅ Padrão Over 0.5 HT detectado! Enviando para análise...")
+                    asyncio.create_task(analisar(conteudo))
                 else:
                     logger.info("♻️ Mensagem ignorada (Não é um padrão Over 0.5 HT).")
         except Exception as e:
