@@ -675,8 +675,11 @@ async def radar_anti_restricao():
                 
                 logger.info(f"👀 Nova mensagem capturada no VIP (ID: {ultimo_id})")
                 
-                # CORREÇÃO: Usando a variável 'conteudo' e chamando a função de análise se bater a condição
-                if "OVER 0.5 HT" in conteudo.upper() and "INTELIGÊNCIA ARTIFICIAL" in conteudo.upper():
+                # CORREÇÃO DEFINITIVA: Utilizando a função normalizar() que já existe no seu código!
+                # Ela tira os acentos e limpa qualquer "espaço invisível" do Telegram antes de comparar.
+                conteudo_limpo = normalizar(conteudo)
+                
+                if "over 0.5 ht" in conteudo_limpo and "inteligencia artificial" in conteudo_limpo:
                     logger.info("✅ Padrão Over 0.5 HT detectado! Enviando para análise...")
                     asyncio.create_task(analisar(conteudo))
                 else:
