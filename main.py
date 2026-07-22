@@ -674,10 +674,8 @@ async def radar_anti_restricao():
                 conteudo = msg_recente.text or ""
                 
                 logger.info(f"👀 Nova mensagem capturada no VIP (ID: {ultimo_id})")
-                
-                if "OVER 0.5 HT" in conteudo and "Inteligência Artificial" in conteudo:
-                    logger.info("🎯 Sinal Validado! Enviando para o cérebro calcular os pontos...")
-                    await analisar(conteudo)
+                 if "OVER 0.5 HT" in texto_mensagem.upper() and "INTELIGÊNCIA ARTIFICIAL" in texto_mensagem.upper():⁠
+
                 else:
                     logger.info("♻️ Mensagem ignorada (Não é um padrão Over 0.5 HT).")
         except Exception as e:
