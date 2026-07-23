@@ -112,7 +112,6 @@ def extrair_pais(texto: str) -> str | None:
         pass
     return None
 
-
 def eh_mercado_primeiro_tempo_over(nome_mercado: str) -> bool:
     nome = (nome_mercado or "").lower()
     return ("over" in nome or "total" in nome) and ("half" in nome or "first" in nome or "tempo" in nome)
@@ -324,7 +323,6 @@ async def buscar_odd_ao_vivo(fixture_id: int, goal_line: float) -> str:
         logger.error(f"❌ Erro crítico em buscar_odd_ao_vivo: {e}")
         
     return odd_encontrada
-
 
 async def buscar_odd_pre_live(fixture_id: int, goal_line: float) -> OddResultado:
     odd_encontrada = "N/D"
@@ -675,15 +673,11 @@ async def radar_anti_restricao():
                 
                 logger.info(f"👀 Nova mensagem capturada no VIP (ID: {ultimo_id})")
                 
-                # CORREÇÃO DEFINITIVA: Utilizando a função normalizar() que já existe no seu código!
-                # Ela tira os acentos e limpa qualquer "espaço invisível" do Telegram antes de comparar.
-                conteudo_limpo = normalizar(conteudo)
+                # CORREÇÃO DEFINITIVA: Sem filtros de string.
+                # Manda tudo direto para a análise já que o canal só tem sinais.
+                logger.info("✅ Encaminhando mensagem diretamente para a análise principal...")
+                asyncio.create_task(analisar(conteudo))
                 
-                if "over 0.5 ht" in conteudo_limpo and "inteligencia artificial" in conteudo_limpo:
-                    logger.info("✅ Padrão Over 0.5 HT detectado! Enviando para análise...")
-                    asyncio.create_task(analisar(conteudo))
-                else:
-                    logger.info("♻️ Mensagem ignorada (Não é um padrão Over 0.5 HT).")
         except Exception as e:
             logger.error(f"⚠️ Erro no radar: {e}")
             await asyncio.sleep(5)
