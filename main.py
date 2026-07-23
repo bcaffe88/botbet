@@ -646,14 +646,15 @@ async def analisar(texto):
 # --- Telethon Client ---
 client = TelegramClient(StringSession(TELEGRAM_SESSION), API_ID, API_HASH)
 
-# --- Radar de Sinais (Bypass de Restrição) ---
+# --- Radar de Sinais (Bypass de Restrição SÊNIOR) ---
 async def radar_anti_restricao():
     logger.info("📡 Iniciando radar de escuta (Modo Polling Anti-Restrição)...")
     ultimo_id = 0
     try:
-        msgs = await client.get_messages(CHAT_ID_SINAL, limit=1)
+        # Calibra o radar pegando um lote das últimas 5 mensagens
+        msgs = await client.get_messages(CHAT_ID_SINAL, limit=5)
         if msgs:
-            ultimo_id = msgs[0].id
+            ultimo_id = max(m.id for m in msgs)
             logger.info(f"📡 Radar calibrado. Ignorando mensagens antigas até ID {ultimo_id}.")
     except Exception as e:
         logger.error(f"Erro ao calibrar radar: {e}")
@@ -661,40 +662,49 @@ async def radar_anti_restricao():
     while True:
         await asyncio.sleep(3) # Vai olhar o grupo a cada 3 segundos
         try:
-            msgs = await client.get_messages(CHAT_ID_SINAL, limit=1)
+            # AGORA SIM: Pegamos as últimas 10 mensagens (evita pular caso mandem 2 ou 3 seguidas)
+            msgs = await client.get_messages(CHAT_ID_SINAL, limit=10)
             if not msgs:
                 continue
             
-            msg_recente = msgs[0]
-            if msg_recente.id > ultimo_id:
+            # Filtra só as mensagens que realmente são novas (ID maior que o último que lemos)
+            novas_msgs = [m for m in msgs if m.id > ultimo_id]
+            
+            if not novas_msgs:
+                continue
+            
+            # Ordena da mais antiga para a mais nova (para ler na ordem cronológica correta)
+            novas_msgs.sort(key=lambda x: x.id)
+            
+            for msg_recente in novas_msgs:
                 ultimo_id = msg_recente.id
-                conteudo_bruto = msg_recente.text or ""
+                
+                # Puxa o texto de todas as propriedades possíveis do Telethon para garantir
+                conteudo_bruto = msg_recente.text or msg_recente.raw_text or msg_recente.message or ""
                 
                 logger.info(f"👀 Nova mensagem capturada no VIP (ID: {ultimo_id})")
                 
-                # 1. RAIOS-X: Mostra no log exatamente o que chegou (revela caracteres invisíveis)
-                logger.info(f"📝 TEXTO BRUTO CAPTURADO: {repr(conteudo_bruto)}")
-                
-                # 2. FAXINA: Arranca caracteres invisíveis do Telegram que quebram a extração (Word Joiner e Zero Width Space)
+                # Faxina os caracteres invisíveis do Telegram que quebram a leitura
                 conteudo_limpo = conteudo_bruto.replace('\u2060', '').replace('\u200b', '').strip()
                 
-                # 3. FILTRO DE SEGURANÇA: Se for mensagem sem texto (foto) ou papo furado, ele ignora.
+                # Filtros de Segurança
                 if not conteudo_limpo:
-                    logger.info("⚠️ Mensagem vazia (foto sem legenda, áudio ou sticker). Ignorada.")
+                    logger.info("⚠️ Mensagem vazia (evento de sistema, foto sem legenda ou sticker). Ignorada.")
                     continue
                     
                 if "⚽" not in conteudo_limpo and "HT" not in conteudo_limpo.upper():
-                    logger.info("⚠️ A mensagem não tem a bola (⚽) nem 'HT'. Não parece um sinal padrão, ignorada.")
+                    logger.info("⚠️ Não parece um sinal padrão (sem ⚽ ou HT). Ignorada.")
                     continue
                 
-                logger.info("✅ Mensagem é um sinal válido. Encaminhando para análise principal...")
+                logger.info("✅ Sinal válido encontrado! Encaminhando para análise principal...")
                 
-                # Passa o conteúdo já faxinado para a análise
+                # Manda para o triturador
                 asyncio.create_task(analisar(conteudo_limpo))
                 
         except Exception as e:
             logger.error(f"⚠️ Erro no radar: {e}")
             await asyncio.sleep(5)
+
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Bot Over HT (Confiança Alta) ativo e escutando!")
