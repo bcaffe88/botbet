@@ -651,7 +651,6 @@ async def radar_anti_restricao():
     logger.info("📡 Iniciando radar de escuta (Modo Polling Anti-Restrição)...")
     ultimo_id = 0
     try:
-        # Calibra o radar na última mensagem para não ler coisas repetidas
         msgs = await client.get_messages(CHAT_ID_SINAL, limit=1)
         if msgs:
             ultimo_id = msgs[0].id
@@ -669,14 +668,29 @@ async def radar_anti_restricao():
             msg_recente = msgs[0]
             if msg_recente.id > ultimo_id:
                 ultimo_id = msg_recente.id
-                conteudo = msg_recente.text or ""
+                conteudo_bruto = msg_recente.text or ""
                 
                 logger.info(f"👀 Nova mensagem capturada no VIP (ID: {ultimo_id})")
                 
-                # CORREÇÃO DEFINITIVA: Sem filtros de string.
-                # Manda tudo direto para a análise já que o canal só tem sinais.
-                logger.info("✅ Encaminhando mensagem diretamente para a análise principal...")
-                asyncio.create_task(analisar(conteudo))
+                # 1. RAIOS-X: Mostra no log exatamente o que chegou (revela caracteres invisíveis)
+                logger.info(f"📝 TEXTO BRUTO CAPTURADO: {repr(conteudo_bruto)}")
+                
+                # 2. FAXINA: Arranca caracteres invisíveis do Telegram que quebram a extração (Word Joiner e Zero Width Space)
+                conteudo_limpo = conteudo_bruto.replace('\u2060', '').replace('\u200b', '').strip()
+                
+                # 3. FILTRO DE SEGURANÇA: Se for mensagem sem texto (foto) ou papo furado, ele ignora.
+                if not conteudo_limpo:
+                    logger.info("⚠️ Mensagem vazia (foto sem legenda, áudio ou sticker). Ignorada.")
+                    continue
+                    
+                if "⚽" not in conteudo_limpo and "HT" not in conteudo_limpo.upper():
+                    logger.info("⚠️ A mensagem não tem a bola (⚽) nem 'HT'. Não parece um sinal padrão, ignorada.")
+                    continue
+                
+                logger.info("✅ Mensagem é um sinal válido. Encaminhando para análise principal...")
+                
+                # Passa o conteúdo já faxinado para a análise
+                asyncio.create_task(analisar(conteudo_limpo))
                 
         except Exception as e:
             logger.error(f"⚠️ Erro no radar: {e}")
