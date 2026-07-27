@@ -646,15 +646,15 @@ async def analisar(texto):
 # --- Telethon Client ---
 client = TelegramClient(StringSession(TELEGRAM_SESSION), API_ID, API_HASH)
 
-# --- Radar de Sinais (Bypass de Restrição SÊNIOR) ---
+# --- Radar de Sinais (Bypass de Restrição SÊNIOR - PROCESSAMENTO EM LOTE) ---
 async def radar_anti_restricao():
     logger.info("📡 Iniciando radar de escuta (Modo Polling Anti-Restrição)...")
     ultimo_id = 0
     try:
-        # Calibra o radar pegando um lote das últimas 5 mensagens
-        msgs = await client.get_messages(CHAT_ID_SINAL, limit=5)
+        # Aumentamos o limite inicial só para calibrar o último ID
+        msgs = await client.get_messages(CHAT_ID_SINAL, limit=1)
         if msgs:
-            ultimo_id = max(m.id for m in msgs)
+            ultimo_id = msgs[0].id
             logger.info(f"📡 Radar calibrado. Ignorando mensagens antigas até ID {ultimo_id}.")
     except Exception as e:
         logger.error(f"Erro ao calibrar radar: {e}")
@@ -662,49 +662,46 @@ async def radar_anti_restricao():
     while True:
         await asyncio.sleep(3) # Vai olhar o grupo a cada 3 segundos
         try:
-            # AGORA SIM: Pegamos as últimas 10 mensagens (evita pular caso mandem 2 ou 3 seguidas)
+            # Aumentamos o limite para 10. Assim, se vier uma "chuva" de sinais juntos, pegamos todos.
             msgs = await client.get_messages(CHAT_ID_SINAL, limit=10)
             if not msgs:
                 continue
             
-            # Filtra só as mensagens que realmente são novas (ID maior que o último que lemos)
+            # Filtra apenas as mensagens mais novas que o nosso ultimo_id
             novas_msgs = [m for m in msgs if m.id > ultimo_id]
             
-            if not novas_msgs:
-                continue
-            
-            # Ordena da mais antiga para a mais nova (para ler na ordem cronológica correta)
-            novas_msgs.sort(key=lambda x: x.id)
-            
-            for msg_recente in novas_msgs:
-                ultimo_id = msg_recente.id
+            if novas_msgs:
+                # Atualiza o ultimo_id com a mensagem MAIS RECENTE do lote (a primeira da lista retornada pelo Telethon)
+                ultimo_id = novas_msgs[0].id
                 
-                # Puxa o texto de todas as propriedades possíveis do Telethon para garantir
-                conteudo_bruto = msg_recente.text or msg_recente.raw_text or msg_recente.message or ""
-                
-                logger.info(f"👀 Nova mensagem capturada no VIP (ID: {ultimo_id})")
-                
-                # Faxina os caracteres invisíveis do Telegram que quebram a leitura
-                conteudo_limpo = conteudo_bruto.replace('\u2060', '').replace('\u200b', '').strip()
-                
-                # Filtros de Segurança
-                if not conteudo_limpo:
-                    logger.info("⚠️ Mensagem vazia (evento de sistema, foto sem legenda ou sticker). Ignorada.")
-                    continue
+                # O Telethon retorna da mais nova [0] para a mais velha. 
+                # Invertemos a lista com 'reversed' para processar na ordem cronológica que foram enviadas.
+                for msg in reversed(novas_msgs):
+                    conteudo_bruto = msg.text or ""
                     
-                if "⚽" not in conteudo_limpo and "HT" not in conteudo_limpo.upper():
-                    logger.info("⚠️ Não parece um sinal padrão (sem ⚽ ou HT). Ignorada.")
-                    continue
-                
-                logger.info("✅ Sinal válido encontrado! Encaminhando para análise principal...")
-                
-                # Manda para o triturador
-                asyncio.create_task(analisar(conteudo_limpo))
-                
+                    logger.info(f"👀 Nova mensagem capturada no VIP (ID: {msg.id})")
+                    logger.info(f"📝 TEXTO BRUTO CAPTURADO: {repr(conteudo_bruto)}")
+                    
+                    # FAXINA: Arranca caracteres invisíveis do Telegram que quebram a extração
+                    conteudo_limpo = conteudo_bruto.replace('\u2060', '').replace('\u200b', '').strip()
+                    
+                    # FILTRO DE SEGURANÇA
+                    if not conteudo_limpo:
+                        logger.info(f"⚠️ Mensagem vazia (ID {msg.id}). Ignorada.")
+                        continue
+                        
+                    if "⚽" not in conteudo_limpo and "HT" not in conteudo_limpo.upper():
+                        logger.info(f"⚠️ Mensagem sem padrão de sinal (ID {msg.id}). Ignorada.")
+                        continue
+                    
+                    logger.info(f"✅ Mensagem ID {msg.id} é um sinal válido. Encaminhando para análise...")
+                    
+                    # Passa o conteúdo já faxinado para a análise sem travar o loop
+                    asyncio.create_task(analisar(conteudo_limpo))
+                    
         except Exception as e:
             logger.error(f"⚠️ Erro no radar: {e}")
             await asyncio.sleep(5)
-
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Bot Over HT (Confiança Alta) ativo e escutando!")
