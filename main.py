@@ -140,7 +140,6 @@ async def buscar_fixture_id(nome_jogo: str, liga_hint: str | None = None, pais_h
                             jogos = data.get("response", [])
                             logger.info(f"API retornou {len(jogos)} jogos para o dia. Comparando nomes...")
 
-                            # Se temos pista de liga/país, filtrar por similaridade
                             if liga_hint or pais_hint:
                                 jogos_filtrados = []
                                 for j in jogos:
@@ -157,7 +156,6 @@ async def buscar_fixture_id(nome_jogo: str, liga_hint: str | None = None, pais_h
                             melhor_match = None
                             maior_similaridade = 0.72
 
-                            # Primeira tentativa: busca exata por similaridade de nome completo
                             logger.info("  1️⃣ Tentando busca por similaridade de nome completo...")
                             for item in jogos:
                                 teams = item.get("teams", {})
@@ -179,7 +177,6 @@ async def buscar_fixture_id(nome_jogo: str, liga_hint: str | None = None, pais_h
                             else:
                                 logger.warning(f"  ❌ Primeira busca falhou. Nenhuma similaridade > {maior_similaridade} encontrada.")
                             
-                            # Segunda tentativa: busca flexível por palavras-chave
                             logger.info("  2️⃣ Tentando busca flexível por palavras-chave...")
                             try:
                                 partes = extrair_times(nome_jogo)
@@ -646,12 +643,11 @@ async def analisar(texto):
 # --- Telethon Client ---
 client = TelegramClient(StringSession(TELEGRAM_SESSION), API_ID, API_HASH)
 
-# --- Radar de Sinais (Bypass de Restrição SÊNIOR - PROCESSAMENTO EM LOTE) ---
+# --- Radar de Sinais BLINDADO ---
 async def radar_anti_restricao():
     logger.info("📡 Iniciando radar de escuta (Modo Polling Anti-Restrição)...")
     ultimo_id = 0
     try:
-        # Aumentamos o limite inicial só para calibrar o último ID
         msgs = await client.get_messages(CHAT_ID_SINAL, limit=1)
         if msgs:
             ultimo_id = msgs[0].id
@@ -660,32 +656,29 @@ async def radar_anti_restricao():
         logger.error(f"Erro ao calibrar radar: {e}")
 
     while True:
-        await asyncio.sleep(3) # Vai olhar o grupo a cada 3 segundos
+        await asyncio.sleep(3) 
         try:
-            # Aumentamos o limite para 10. Assim, se vier uma "chuva" de sinais juntos, pegamos todos.
             msgs = await client.get_messages(CHAT_ID_SINAL, limit=10)
             if not msgs:
                 continue
             
-            # Filtra apenas as mensagens mais novas que o nosso ultimo_id
             novas_msgs = [m for m in msgs if m.id > ultimo_id]
             
             if novas_msgs:
-                # Atualiza o ultimo_id com a mensagem MAIS RECENTE do lote (a primeira da lista retornada pelo Telethon)
                 ultimo_id = novas_msgs[0].id
                 
-                # O Telethon retorna da mais nova [0] para a mais velha. 
-                # Invertemos a lista com 'reversed' para processar na ordem cronológica que foram enviadas.
                 for msg in reversed(novas_msgs):
-                    conteudo_bruto = msg.text or ""
+                    
+                    # EXTRAÇÃO BRUTA SÊNIOR MAX: Vai puxar texto de qualquer lugar, mesmo que venha como caption, media, etc
+                    conteudo_bruto = getattr(msg, 'raw_text', None) or getattr(msg, 'text', None) or getattr(msg, 'message', None) or getattr(msg, 'caption', None) or ""
                     
                     logger.info(f"👀 Nova mensagem capturada no VIP (ID: {msg.id})")
                     logger.info(f"📝 TEXTO BRUTO CAPTURADO: {repr(conteudo_bruto)}")
                     
-                    # FAXINA: Arranca caracteres invisíveis do Telegram que quebram a extração
+                    # Faxina
                     conteudo_limpo = conteudo_bruto.replace('\u2060', '').replace('\u200b', '').strip()
                     
-                    # FILTRO DE SEGURANÇA
+                    # Filtro de Segurança
                     if not conteudo_limpo:
                         logger.info(f"⚠️ Mensagem vazia (ID {msg.id}). Ignorada.")
                         continue
@@ -696,7 +689,6 @@ async def radar_anti_restricao():
                     
                     logger.info(f"✅ Mensagem ID {msg.id} é um sinal válido. Encaminhando para análise...")
                     
-                    # Passa o conteúdo já faxinado para a análise sem travar o loop
                     asyncio.create_task(analisar(conteudo_limpo))
                     
         except Exception as e:
@@ -724,7 +716,6 @@ async def main():
         await app.updater.start_polling(drop_pending_updates=True)
         logger.info("✅ Bot do Telegram (para comandos) inicializado")
         
-        # Blinda o código para não pedir número de telefone na nuvem
         await client.connect()
         if not await client.is_user_authorized():
             logger.error("❌ A Sessão do Telegram (TELEGRAM_SESSION) expirou ou é inválida!")
@@ -734,7 +725,6 @@ async def main():
         logger.info(f"✅ Telethon conectado como: {me.first_name} (@{me.username})")
         logger.info("🔄 Bot rodando... Pressione Ctrl+C para parar")
         
-        # Ativando o novo Radar Polling junto com o loop do Telethon
         asyncio.create_task(radar_anti_restricao())
         
         await client.run_until_disconnected()
