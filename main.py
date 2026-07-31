@@ -366,8 +366,10 @@ async def analisar(texto):
         jogo_match = re.search(r'⚽️\s*(.+)', texto)
         jogo = jogo_match.group(1).strip() if jogo_match else "Times não identificados"
         
-        if "U20" in jogo.upper() or "U19" in jogo.upper(): return
-        
+        if "U20" in jogo.upper() or "U19" in jogo.upper(): 
+            logger.info(f"🚫 Jogo ignorado (Filtro Sub-19/20): {jogo}")
+            return
+            
         logger.info(f"📌 Jogo detectado: {jogo}")
         minuto_match = re.search(r"⏰\s*(\d+)", texto)
         minuto = int(minuto_match.group(1)) if minuto_match else None
